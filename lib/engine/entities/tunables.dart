@@ -63,6 +63,13 @@ abstract final class Tunables {
   /// Speed multiplier applied to an airborne smash (the jump smash).
   static const Fix jumpSmashBonus = Fix.of(kJumpSmashBonus);
 
+  /// Horizontal offset from the server's centre toward the net at which the
+  /// shuttle is placed for a serve.
+  static const Fix serveShuttleOffsetX = Fix.of(kServeShuttleOffsetX);
+
+  /// Height above the ground at which the serve shuttle is placed.
+  static const Fix serveShuttleHeight = Fix.of(kServeShuttleHeight);
+
   /// Maximum (and starting) stamina.
   static const Fix staminaMax = Fix.of(kStaminaMax);
 
