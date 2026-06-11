@@ -1,5 +1,7 @@
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/ui/theme/theme.dart';
 
 Future<void> main() async {
@@ -23,10 +25,10 @@ class MainApp extends StatelessWidget {
       title: 'Arcade Badminton',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const Scaffold(
-        body: Center(
-          child: Text('Arcade Badminton'),
-        ),
+      home: GameWidget(
+        // Wall-clock seed is fine here — this is outside the engine; the
+        // engine itself never calls dart:math directly (see CLAUDE.md).
+        game: BadmintonGame(seed: DateTime.now().millisecondsSinceEpoch),
       ),
     );
   }
