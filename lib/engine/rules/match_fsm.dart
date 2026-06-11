@@ -271,6 +271,17 @@ final class MatchFsm {
     }
   }
 
+  /// Aborts the match into [MatchPhase.matchOver] from any phase (M1-018).
+  ///
+  /// This is the **error-recovery path**: when `MatchErrorHandler` catches a
+  /// fault mid-tick it cannot trust the live state, so it forces the match to
+  /// terminate gracefully rather than leave it wedged. The transition is logged
+  /// with [reason] for the crash report. Inert if the match is already over.
+  void abortMatch(int frame, String reason) {
+    if (phase == MatchPhase.matchOver) return;
+    _transition(frame, MatchPhase.matchOver, 'aborted: $reason');
+  }
+
   /// Resolves a simultaneous swing (M1-015): when both players press a shot on
   /// the same frame and both could connect, priority goes to the player on the
   /// shuttle's current side of the net.

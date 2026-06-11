@@ -77,6 +77,13 @@ const double kPlayer1StartX = kCourtLeftBound + 120;
 /// Starting x of player 2 (right side).
 const double kPlayer2StartX = kCourtRightBound - 120;
 
+/// Horizontal offset from the server's centre toward the net at which the
+/// shuttle is placed for a serve.
+const double kServeShuttleOffsetX = 40;
+
+/// Height above the ground at which the serve shuttle is placed.
+const double kServeShuttleHeight = 80;
+
 /// Extra horizontal and vertical reach the racquet adds to the player hitbox
 /// on the facing side (and upward), in game units. Models the racquet arm
 /// extending the effective contact zone in front of and above the body.
@@ -231,3 +238,10 @@ const int kMaxRollbackFrames = 600;
 
 /// Interval, in frames, between full state snapshots.
 const int kSnapshotInterval = 6;
+
+// ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
+/// Frames of input history captured in a crash report (M1-018).
+const int kCrashInputHistoryFrames = 60;
