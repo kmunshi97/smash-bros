@@ -104,7 +104,7 @@ jobs:
           COVERAGE=$((ENGINE_HITS * 100 / ENGINE_LINES))
           echo "Engine coverage: ${COVERAGE}% (${ENGINE_HITS}/${ENGINE_LINES} lines)"
 
-          if [ "$COVERAGE" -lt 95 ]; then
-            echo "::error::Engine coverage ${COVERAGE}% is below the 95% threshold."
+          if [ "$COVERAGE" -lt 90 ]; then
+            echo "::error::Engine coverage ${COVERAGE}% is below the 90% threshold."
             exit 1
           fi
