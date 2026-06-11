@@ -200,6 +200,18 @@ abstract final class CollisionSystem {
       netIsCord = false;
     }
 
+    // -- Ground reached before the net plane consumes the sweep --------------
+    // A steep shot can land in front of the net while its extrapolated
+    // segment continues across the net plane *below ground level* (the net
+    // crossing y is then > groundY, which would otherwise read as a net-body
+    // hit). Sweep order decides: the crossing with the smaller t happened
+    // first, and a ground hit ends the rally, so nothing after it occurred.
+    if (groundT != null && (netT == null || groundT <= netT)) {
+      events.add(_groundHit(landingX!, court));
+      _applyGround(shuttle, landingX, court);
+      return events;
+    }
+
     // -- Net-body hit consumes the sweep -------------------------------------
     if (netIsBody) {
       events.add(NetBodyHit(netCrossing!));
@@ -207,28 +219,17 @@ abstract final class CollisionSystem {
       return events;
     }
 
-    // -- Otherwise gather net-cord and ground events in ascending-t order ----
-    // (A clean passage contributes no net event.)
+    // -- Otherwise gather the net-cord and any later ground event ------------
+    // (A clean passage contributes no net event.) Reaching here means either
+    // there is no ground crossing, or it occurs after the net crossing
+    // (netT < groundT), so events are already in ascending-t order.
     if (netIsCord) {
-      if (groundT != null && groundT < netT!) {
-        // Ground first (rare given geometry, but handle for correctness).
-        events
-          ..add(_groundHit(landingX!, court))
-          ..add(NetCordHit(netCrossing!));
-      } else {
-        events.add(NetCordHit(netCrossing!));
-        if (groundT != null) {
-          events.add(_groundHit(landingX!, court));
-        }
-      }
+      events.add(NetCordHit(netCrossing!));
       _applyNetCord(shuttle);
-    } else if (groundT != null) {
-      events.add(_groundHit(landingX!, court));
     }
-
-    // -- Apply ground response if a ground hit occurred ----------------------
     if (groundT != null) {
-      _applyGround(shuttle, landingX!, court);
+      events.add(_groundHit(landingX!, court));
+      _applyGround(shuttle, landingX, court);
     }
 
     return events;

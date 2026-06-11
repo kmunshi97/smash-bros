@@ -209,7 +209,9 @@ void main() {
     });
 
     test('net body hit from the right parks on the right side', () {
-      final s = _swept(_v(700, 580), _v(600, 620), velocity: _v(-100, 40));
+      // Net crossing at t = 0.6, y = 524 — squarely on the net body, well
+      // above the ground (no ground crossing on this sweep).
+      final s = _swept(_v(700, 500), _v(600, 540), velocity: _v(-100, 40));
       final events = CollisionSystem.resolve(s, _court);
       expect(events.single, isA<NetBodyHit>());
       expect(s.position.x.toDouble(), greaterThan(640));
@@ -241,6 +243,23 @@ void main() {
       final events = CollisionSystem.resolve(s, _court);
       expect(events, isEmpty);
       expect(s.position.x.toDouble().isNaN, isFalse);
+    });
+
+    test('ground hit BEFORE the net plane wins the sweep (steep smash)', () {
+      // Starts left of the net at (600, 590), ends past the net below ground
+      // at (650, 615). Ground crossing: t = (600-590)/25 = 0.4 -> x = 620
+      // (in front of the net). Net crossing: t = 0.8 at y = 610, which is
+      // BELOW ground level — the shuttle landed before ever reaching the
+      // net, so this must be a GroundHit, not a NetBodyHit.
+      final s = _swept(_v(600, 590), _v(650, 615), velocity: _v(50, 25));
+      final events = CollisionSystem.resolve(s, _court);
+      expect(events, hasLength(1));
+      final hit = events.single;
+      expect(hit, isA<GroundHit>());
+      expect((hit as GroundHit).landingX.toDouble(), closeTo(620, 1e-9));
+      expect(hit.side, CourtSide.left);
+      expect(s.position, FixVec2(hit.landingX, _court.groundY));
+      expect(s.velocity, FixVec2.zero);
     });
 
     test('determinism: two identical shuttles resolved twice match', () {
