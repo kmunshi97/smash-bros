@@ -1,0 +1,100 @@
+name: Badminton CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Dart Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: dart format --set-exit-if-changed .
+
+      - name: Run analysis
+        run: flutter analyze --fatal-infos
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run tests with coverage
+        run: flutter test --coverage
+
+      - name: Check engine coverage threshold
+        run: |
+          if [ ! -f coverage/lcov.info ]; then
+            echo "No coverage data found — skipping threshold check."
+            exit 0
+          fi
+
+          ENGINE_TOTAL=$(grep -c 'SF:lib/engine/' coverage/lcov.info 2>/dev/null || echo "0")
+          if [ "$ENGINE_TOTAL" = "0" ]; then
+            echo "No engine source files in coverage — skipping threshold check."
+            exit 0
+          fi
+
+          ENGINE_HITS=0
+          ENGINE_LINES=0
+          IN_ENGINE=false
+
+          while IFS= read -r line; do
+            case "$line" in
+              SF:lib/engine/*)
+                IN_ENGINE=true
+                ;;
+              SF:*)
+                IN_ENGINE=false
+                ;;
+              LH:*)
+                if $IN_ENGINE; then
+                  ENGINE_HITS=$((ENGINE_HITS + ${line#LH:}))
+                fi
+                ;;
+              LF:*)
+                if $IN_ENGINE; then
+                  ENGINE_LINES=$((ENGINE_LINES + ${line#LF:}))
+                fi
+                ;;
+            esac
+          done < coverage/lcov.info
+
+          if [ "$ENGINE_LINES" -eq 0 ]; then
+            echo "No engine lines found — skipping threshold check."
+            exit 0
+          fi
+
+          COVERAGE=$((ENGINE_HITS * 100 / ENGINE_LINES))
+          echo "Engine coverage: ${COVERAGE}% (${ENGINE_HITS}/${ENGINE_LINES} lines)"
+
+          if [ "$COVERAGE" -lt 95 ]; then
+            echo "::error::Engine coverage ${COVERAGE}% is below the 95% threshold."
+            exit 1
+          fi

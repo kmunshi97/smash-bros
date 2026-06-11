@@ -1,0 +1,38 @@
+name: smash_bros
+description: "2D Arcade Badminton game built with Flutter and Flame."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Game engine
+  flame: ^1.35.1
+  flame_audio: ^2.11.14
+
+  # State management
+  flutter_bloc: ^9.1.1
+  equatable: ^2.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Linting
+  very_good_analysis: ^9.0.0
+
+  # Testing
+  bloc_test: ^10.0.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/sprites/
+    - assets/audio/
+    - assets/data/
