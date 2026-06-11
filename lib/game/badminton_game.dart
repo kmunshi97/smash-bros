@@ -3,6 +3,7 @@ import 'package:flame/game.dart';
 import 'package:flame/input.dart';
 // `Simulation` in flutter/widgets.dart (physics) conflicts with our engine's
 // Simulation; hide the Flutter one to resolve the ambiguity.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' hide Simulation;
 import 'package:smash_bros/engine/constants.dart';
@@ -108,11 +109,11 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   late MovePadComponent _movePad;
   late ActionButtonsComponent _actionButtons;
 
-  // -- Debug HUD (replaced by the real HUD in M1-026) -----------------------
-
-  /// Debug text overlay showing frame / phase / score. Marked for removal when
-  /// the proper HUD lands in M1-026.
-  late TextComponent _debugText;
+  // -- HUD components (M1-026) — kept so safeArea can be forwarded on set. --
+  late ScoreHudComponent _scoreHud;
+  late StaminaBarComponent _staminaLeft;
+  late StaminaBarComponent _staminaRight;
+  late PhaseBannerComponent _phaseBanner;
 
   // -- FlameGame overrides ---------------------------------------------------
 
@@ -128,19 +129,12 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     // Cache the initial view so [view] is ready before the first update().
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
 
-    // -- Debug scaffolding (remove in M1-026) ----------------------------------
-    // FpsTextComponent shows the current frame rate in the top-left corner.
-    camera.viewport.add(FpsTextComponent(position: Vector2(8, 8)));
-
-    // A small one-line status shows frame / phase / score. Updated each tick
-    // in [update]; the component is added to the viewport so it renders in
-    // screen space (HUD overlay), not world space.
-    _debugText = TextComponent(
-      text: _debugString(),
-      position: Vector2(8, 32),
-    );
-    camera.viewport.add(_debugText);
-    // -- End debug scaffolding ------------------------------------------------
+    // -- Debug-only fps counter -----------------------------------------------
+    // Kept for the macOS feel-tuning loop; stripped from release builds.
+    if (kDebugMode) {
+      camera.viewport.add(FpsTextComponent(position: Vector2(8, 8)));
+    }
+    // -------------------------------------------------------------------------
 
     // The fixed-resolution viewfinder looks at world (0,0) anchored centre by
     // default, which would put the court's top-left corner in the middle of
@@ -165,6 +159,23 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     _actionButtons = ActionButtonsComponent(safeArea: _safeArea);
     await camera.viewport.add(_movePad);
     await camera.viewport.add(_actionButtons);
+
+    // -- HUD components (M1-026) added to viewport (HUD space) ---------------
+    // All three read game.view each frame and never touch the simulation.
+    _scoreHud = ScoreHudComponent(safeArea: _safeArea);
+    _staminaLeft = StaminaBarComponent(
+      side: CourtSide.left,
+      safeArea: _safeArea,
+    );
+    _staminaRight = StaminaBarComponent(
+      side: CourtSide.right,
+      safeArea: _safeArea,
+    );
+    _phaseBanner = PhaseBannerComponent();
+    await camera.viewport.add(_scoreHud);
+    await camera.viewport.add(_staminaLeft);
+    await camera.viewport.add(_staminaRight);
+    await camera.viewport.add(_phaseBanner);
   }
 
   @override
@@ -174,8 +185,6 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     // Recompute the cached view once per render frame (after advancing the
     // driver so alpha is current for this frame's interpolation point).
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
-    // Refresh the debug overlay every render frame (cheap string update).
-    _debugText.text = _debugString();
   }
 
   /// The interpolated render state between the previous and current ticks,
@@ -202,6 +211,9 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     if (isLoaded) {
       _movePad.safeArea = value;
       _actionButtons.safeArea = value;
+      _scoreHud.safeArea = value;
+      _staminaLeft.safeArea = value;
+      _staminaRight.safeArea = value;
     }
   }
 
@@ -302,13 +314,5 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
         // No-op: the OS is tearing down the isolate; nothing to restore.
         break;
     }
-  }
-
-  // -- Helpers ---------------------------------------------------------------
-
-  String _debugString() {
-    final v = _current;
-    return 'frame=${v.frame} phase=${v.phase.name} '
-        'score=${v.leftScore}-${v.rightScore}';
   }
 }

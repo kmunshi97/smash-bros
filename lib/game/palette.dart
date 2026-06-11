@@ -86,4 +86,22 @@ abstract final class GamePalette {
   /// Accent colour for the context-sensitive serve (TOSS) button — gold, so
   /// the serve affordance reads as distinct from the rally actions.
   static const Color serveAccent = Color(0xFFFFD700);
+
+  // -- Stamina bars (M1-026) -------------------------------------------------
+
+  /// Normal stamina fill — bright green, clearly readable against the dark
+  /// background, communicates a healthy stamina state at a glance.
+  static const Color staminaFill = Color(0xFF4CAF50);
+
+  /// Low-stamina fill — warm amber-red, unmistakably distinct from [staminaFill]
+  /// and maps to the danger zone below the stamina debuff threshold.
+  static const Color staminaLow = Color(0xFFE53935);
+
+  /// Stamina bar border — medium grey so the bar frame reads against both the
+  /// dark background and the coloured fill without distracting from play.
+  static const Color staminaBarBorder = Color(0xFF888888);
+
+  /// Stamina bar background — very dark grey, giving the bar a recessed look
+  /// so the fill stands out clearly.
+  static const Color staminaBarBackground = Color(0xFF222222);
 }
