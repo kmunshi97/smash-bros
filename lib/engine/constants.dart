@@ -216,6 +216,12 @@ const int kDeuceLeadRequired = 2;
 /// Hard score cap that ends deuce regardless of lead.
 const int kDeuceCap = 15;
 
+/// Ticks spent in the `pointScored` phase before the next serve.
+///
+/// At 60 ticks/sec this is 1.5 s of "point!" presentation time, giving the HUD
+/// room to show the winner of the point before play resets.
+const int kPointPauseTicks = 90;
+
 // ---------------------------------------------------------------------------
 // Rollback / Netcode (Milestone 3, defined early for buffer sizing)
 // ---------------------------------------------------------------------------
