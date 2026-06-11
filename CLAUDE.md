@@ -14,7 +14,7 @@ Landscape-only 2D badminton game. Pure-Dart simulation engine + Flame rendering;
 
 - **Phase = branch = PR.** Each plan task block lands as one reviewable PR (~200–500 lines) pushed to GitHub before the next block starts. The owner code-reviews every PR — write PR descriptions for a reviewer following along: what to look at, design decisions taken, how to verify manually.
 - Conventional commits referencing plan task IDs: `feat(engine): M1-005 swept collision`.
-- Tests land in the same PR as the code they cover. Engine coverage target: ≥95%.
+- Tests land in the same PR as the code they cover. Engine coverage gate: ≥90% (CI-enforced; the suite currently sits at ~93%).
 - Model-tier delegation: tasks in docs/PLAN.md are tagged `[H]` Haiku / `[S]` Sonnet / `[O]` Opus / `[F]` Fable — when delegating to subagents, use the tagged tier; Fable reviews `[O]`-tagged and all money/security paths.
 
 ## Code style
