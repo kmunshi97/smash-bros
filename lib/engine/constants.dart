@@ -77,6 +77,15 @@ const double kPlayer1StartX = kCourtLeftBound + 120;
 /// Starting x of player 2 (right side).
 const double kPlayer2StartX = kCourtRightBound - 120;
 
+/// Extra horizontal and vertical reach the racquet adds to the player hitbox
+/// on the facing side (and upward), in game units. Models the racquet arm
+/// extending the effective contact zone in front of and above the body.
+const double kRacquetReach = 40;
+
+/// Speed multiplier applied to a smash hit while the player is airborne — the
+/// genre-defining jump smash hits harder than a grounded smash.
+const double kJumpSmashBonus = 1.15;
+
 // ---------------------------------------------------------------------------
 // Shuttle
 // ---------------------------------------------------------------------------
