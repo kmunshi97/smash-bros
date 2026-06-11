@@ -1,0 +1,8 @@
+include: ../../analysis_options.yaml
+
+# The pure-Dart simulation engine is held to a stricter bar than the rest of
+# the app: every public symbol must be documented so the engine reads as a
+# self-contained, reviewable library (CLAUDE.md "Code style").
+linter:
+  rules:
+    public_member_api_docs: true
