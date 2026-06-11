@@ -105,6 +105,12 @@ class BadmintonGame extends FlameGame {
     camera.viewport.add(_debugText);
     // -- End debug scaffolding ------------------------------------------------
 
+    // The fixed-resolution viewfinder looks at world (0,0) anchored centre by
+    // default, which would put the court's top-left corner in the middle of
+    // the screen. Aim it at the court centre so world coords map 1:1 onto the
+    // 1280×720 letterboxed screen.
+    camera.viewfinder.position = Vector2(kCourtWidth / 2, kCourtHeight / 2);
+
     // -- World components (M1-022..024) ---------------------------------------
     // Order matters: court is drawn first (background), then players, then the
     // shuttle on top. All three are added to the world (not the viewport) so
