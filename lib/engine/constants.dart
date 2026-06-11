@@ -27,6 +27,13 @@ const double kNetX = kCourtWidth / 2;
 /// sits above the ground).
 const double kNetTopY = 350;
 
+/// Height of the net-cord band (the tape) below the net top.
+///
+/// A sweep crossing the net plane within `[kNetTopY, kNetTopY + kNetTapeHeight]`
+/// is a tape (net-cord) hit rather than a net-body hit. Above the band is clean
+/// passage; below it is a solid net-body hit.
+const double kNetTapeHeight = 8;
+
 /// Y coordinate of the ground plane.
 const double kGroundY = 600;
 
@@ -88,6 +95,12 @@ const double kShuttleMaxVelocity = 20;
 
 /// Shuttle collision radius in game units.
 const double kShuttleRadius = 6;
+
+/// Velocity-scaling factor applied when the shuttle clips the net cord (tape).
+///
+/// A net-cord hit damps the shuttle but lets it continue; its velocity is
+/// multiplied by this factor.
+const double kNetCordDamping = 0.5;
 
 /// Launch speed of a normal clear/drive shot.
 const double kNormalShotSpeed = 8;

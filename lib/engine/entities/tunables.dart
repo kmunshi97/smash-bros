@@ -23,6 +23,13 @@ abstract final class Tunables {
   /// The y coordinate of the ground plane (player feet rest here).
   static const Fix groundY = Fix.of(kGroundY);
 
+  /// Height of the net-cord (tape) band below the net top.
+  static const Fix netTapeHeight = Fix.of(kNetTapeHeight);
+
+  /// The y coordinate of the bottom of the net-cord band. A net-plane crossing
+  /// at or above this y (but at/below [netTopY]) is a net-cord hit.
+  static const Fix netTapeBottomY = Fix.of(kNetTopY + kNetTapeHeight);
+
   /// The leftmost playable x (outer court boundary).
   static const Fix courtLeftBound = Fix.of(kCourtLeftBound);
 
@@ -59,4 +66,7 @@ abstract final class Tunables {
 
   /// Maximum shuttle speed in game units per tick (stability safeguard).
   static const Fix shuttleMaxVelocity = Fix.of(kShuttleMaxVelocity);
+
+  /// Velocity-scaling factor applied when the shuttle clips the net cord.
+  static const Fix netCordDamping = Fix.of(kNetCordDamping);
 }
