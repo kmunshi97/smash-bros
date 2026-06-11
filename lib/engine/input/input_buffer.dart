@@ -67,9 +67,16 @@ final class InputBuffer {
       );
     }
 
-    // Clear any skipped slots to guard against stale-data reads.
+    // Clear any skipped slots to guard against stale-data reads. The loop is
+    // bounded to the ring size: in a jump wider than the capacity every slot
+    // is skipped at least once, so clearing only the last `capacity` skipped
+    // frames touches each slot exactly once — an unbounded loop would make a
+    // huge frame jump O(gap) for no additional effect.
     if (_newestFrame >= 0 && frame > _newestFrame + 1) {
-      for (var f = _newestFrame + 1; f < frame; f++) {
+      final firstSkipped = _newestFrame + 1;
+      final boundedFrom = frame - _capacity;
+      final clearFrom = boundedFrom > firstSkipped ? boundedFrom : firstSkipped;
+      for (var f = clearFrom; f < frame; f++) {
         _data[f % _capacity] = InputAction.none;
       }
     }
