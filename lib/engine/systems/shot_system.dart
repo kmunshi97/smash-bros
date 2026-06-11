@@ -3,47 +3,15 @@ import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/entities/player.dart';
 import 'package:smash_bros/engine/entities/shuttle.dart';
 import 'package:smash_bros/engine/entities/tunables.dart';
-import 'package:smash_bros/engine/input/input_action.dart';
 import 'package:smash_bros/engine/math/fix.dart';
 import 'package:smash_bros/engine/math/fix_vec2.dart';
 import 'package:smash_bros/engine/random/game_random.dart';
 import 'package:smash_bros/engine/systems/rally_state.dart';
+import 'package:smash_bros/engine/systems/shot_type.dart';
 
-/// The kind of shot a player attempts on a swing.
-enum ShotType {
-  /// A normal clear/drive shot — a moderate upward arc.
-  normal,
-
-  /// An overhead smash — a fast downward shot, stronger when airborne.
-  smash,
-
-  /// A drop shot — a soft shot that bleeds speed near the net (higher drag).
-  drop,
-
-  /// A serve toss — a high, soft lob to start a point.
-  toss;
-
-  /// Maps an (already-sanitized) input [bitmask] to its [ShotType], or `null`
-  /// when no shot bit is set.
-  ///
-  /// The [bitmask] is assumed to have passed `InputValidator.sanitize`, so at
-  /// most one shot bit is present; the first match wins regardless.
-  static ShotType? fromBitmask(int bitmask) {
-    if (InputAction.has(bitmask, InputAction.normalShot)) {
-      return ShotType.normal;
-    }
-    if (InputAction.has(bitmask, InputAction.smash)) {
-      return ShotType.smash;
-    }
-    if (InputAction.has(bitmask, InputAction.dropShot)) {
-      return ShotType.drop;
-    }
-    if (InputAction.has(bitmask, InputAction.toss)) {
-      return ShotType.toss;
-    }
-    return null;
-  }
-}
+// ShotType moved to shot_type.dart to break the rally_state <-> shot_system
+// import cycle; re-exported so existing `shot_system.dart` importers keep it.
+export 'package:smash_bros/engine/systems/shot_type.dart';
 
 /// Per-shot stat modifiers — the Milestone 3 loadout hook (M1-010).
 ///
@@ -169,7 +137,7 @@ abstract final class ShotSystem {
 
     // 2. Reach box: hitbox expanded by the racquet reach on the facing side
     //    and upward. Contact behind the body is a whiff.
-    if (!_withinReach(player, shuttle.position)) {
+    if (!isWithinReach(player, shuttle.position)) {
       return null;
     }
 
@@ -221,7 +189,8 @@ abstract final class ShotSystem {
     shuttle.launch(velocity);
     rally
       ..lastHitter = player.courtSide
-      ..hitLockout = player.courtSide;
+      ..hitLockout = player.courtSide
+      ..lastShotType = shotType;
 
     return SwingResult(
       shotType: shotType,
@@ -231,8 +200,13 @@ abstract final class ShotSystem {
   }
 
   /// Whether [point] lies inside [player]'s hitbox expanded by the racquet
-  /// reach on the facing side and upward.
-  static bool _withinReach(Player player, FixVec2 point) {
+  /// reach on the facing side and upward — the canonical "can this player
+  /// contact the shuttle here?" test.
+  ///
+  /// Public and static so the single reach geometry is shared rather than
+  /// duplicated: `StunSystem.evaluateBlockTiming`'s lookahead and (later) the
+  /// AI both need the identical predicate, and two copies would silently drift.
+  static bool isWithinReach(Player player, FixVec2 point) {
     final Fix left;
     final Fix right;
     switch (player.facing) {

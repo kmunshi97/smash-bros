@@ -161,18 +161,19 @@ void main() {
       expect(result, isNull);
     });
 
-    test('a hit arms the lockout for the hitter side', () {
+    test('a hit arms the lockout and records the shot type', () {
       final rally = RallyState();
       ShotSystem.trySwing(
         player: _leftPlayer(),
         shuttle: _inReachLeft(),
         rally: rally,
-        shotType: ShotType.normal,
+        shotType: ShotType.smash,
         random: _rng(),
         court: _court,
       );
       expect(rally.hitLockout, CourtSide.left);
       expect(rally.lastHitter, CourtSide.left);
+      expect(rally.lastShotType, ShotType.smash);
     });
 
     test('after the shuttle crosses, the same player can hit again', () {

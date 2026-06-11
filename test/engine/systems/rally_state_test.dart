@@ -5,6 +5,7 @@ import 'package:smash_bros/engine/entities/tunables.dart';
 import 'package:smash_bros/engine/math/fix.dart';
 import 'package:smash_bros/engine/math/fix_vec2.dart';
 import 'package:smash_bros/engine/systems/rally_state.dart';
+import 'package:smash_bros/engine/systems/shot_type.dart';
 
 const _court = Court();
 
@@ -20,6 +21,7 @@ void main() {
       final rally = RallyState();
       expect(rally.lastHitter, isNull);
       expect(rally.hitLockout, isNull);
+      expect(rally.lastShotType, isNull);
       expect(rally.activeDragCoefficient, Tunables.shuttleDragCoefficient);
     });
   });
@@ -72,10 +74,12 @@ void main() {
       final rally = RallyState(
         lastHitter: CourtSide.right,
         hitLockout: CourtSide.right,
+        lastShotType: ShotType.smash,
         activeDragCoefficient: Tunables.shuttleDropShotDrag,
       )..reset();
       expect(rally.lastHitter, isNull);
       expect(rally.hitLockout, isNull);
+      expect(rally.lastShotType, isNull);
       expect(rally.activeDragCoefficient, Tunables.shuttleDragCoefficient);
     });
   });
@@ -85,6 +89,7 @@ void main() {
       final original = RallyState(
         lastHitter: CourtSide.left,
         hitLockout: CourtSide.left,
+        lastShotType: ShotType.drop,
         activeDragCoefficient: Tunables.shuttleDropShotDrag,
       );
       final snapshot = original.copy();
@@ -93,10 +98,12 @@ void main() {
       original
         ..lastHitter = CourtSide.right
         ..hitLockout = null
+        ..lastShotType = ShotType.smash
         ..activeDragCoefficient = Tunables.shuttleDragCoefficient;
 
       expect(snapshot.lastHitter, CourtSide.left);
       expect(snapshot.hitLockout, CourtSide.left);
+      expect(snapshot.lastShotType, ShotType.drop);
       expect(snapshot.activeDragCoefficient, Tunables.shuttleDropShotDrag);
     });
   });

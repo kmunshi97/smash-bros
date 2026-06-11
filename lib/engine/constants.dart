@@ -157,6 +157,14 @@ const int kSwingAnimationFrames = 12;
 /// Duration of a stun, in frames.
 const int kStunDurationFrames = 60;
 
+/// Upper bound on the block-timing lookahead simulation (M1-035).
+///
+/// The defender-swing block timing is measured by forward-simulating a clone
+/// of the shuttle for at most this many ticks to find its arrival tick. The
+/// cost of `StunSystem.evaluateBlockTiming` is therefore bounded at this many
+/// `Shuttle.integrate` calls per defender swing.
+const int kBlockLookaheadMaxTicks = 30;
+
 /// Frames before a serve times out.
 const int kServeTimeoutFrames = 300;
 
@@ -187,6 +195,10 @@ const double kStaminaDebuffThreshold = 30;
 
 /// Minimum action multiplier when stamina is fully depleted.
 const double kStaminaMinMultiplier = 0.5;
+
+/// Power multiplier for the weak pop-up return of an imperfectly timed smash
+/// block (M1-035). An imperfect block still connects but returns a feeble lob.
+const double kImperfectBlockPowerMultiplier = 0.5;
 
 // ---------------------------------------------------------------------------
 // Scoring

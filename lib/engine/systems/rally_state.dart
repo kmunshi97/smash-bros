@@ -2,6 +2,7 @@ import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/entities/shuttle.dart';
 import 'package:smash_bros/engine/entities/tunables.dart';
 import 'package:smash_bros/engine/math/fix.dart';
+import 'package:smash_bros/engine/systems/shot_type.dart';
 
 /// Per-point rally bookkeeping shared by the shot, collision and (later) match
 /// systems.
@@ -26,6 +27,7 @@ final class RallyState {
   RallyState({
     this.lastHitter,
     this.hitLockout,
+    this.lastShotType,
     Fix? activeDragCoefficient,
   }) : activeDragCoefficient =
            activeDragCoefficient ?? Tunables.shuttleDragCoefficient;
@@ -33,6 +35,14 @@ final class RallyState {
   /// Which side last hit the shuttle, or `null` when it is untouched since the
   /// serve.
   CourtSide? lastHitter;
+
+  /// The [ShotType] of the most recent connecting swing, or `null` when the
+  /// shuttle is untouched since the serve.
+  ///
+  /// Set by `ShotSystem.trySwing` on a successful hit. The defence logic reads
+  /// it (via `StunSystem.evaluateBlockTiming`) to know whether the incoming
+  /// shot is a smash that can be perfect-blocked.
+  ShotType? lastShotType;
 
   /// The side currently forbidden to swing, or `null` when neither side is
   /// locked out.
@@ -70,6 +80,7 @@ final class RallyState {
   void reset() {
     lastHitter = null;
     hitLockout = null;
+    lastShotType = null;
     activeDragCoefficient = Tunables.shuttleDragCoefficient;
   }
 
@@ -77,6 +88,7 @@ final class RallyState {
   RallyState copy() => RallyState(
     lastHitter: lastHitter,
     hitLockout: hitLockout,
+    lastShotType: lastShotType,
     activeDragCoefficient: activeDragCoefficient,
   );
 }

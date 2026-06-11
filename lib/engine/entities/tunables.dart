@@ -63,8 +63,33 @@ abstract final class Tunables {
   /// Speed multiplier applied to an airborne smash (the jump smash).
   static const Fix jumpSmashBonus = Fix.of(kJumpSmashBonus);
 
-  /// Maximum starting stamina.
+  /// Maximum (and starting) stamina.
   static const Fix staminaMax = Fix.of(kStaminaMax);
+
+  /// Stamina drained by a normal (or drop) shot.
+  static const Fix staminaDrainNormal = Fix.of(kStaminaDrainNormal);
+
+  /// Stamina drained by a smash.
+  static const Fix staminaDrainSmash = Fix.of(kStaminaDrainSmash);
+
+  /// Stamina drained by a jump.
+  static const Fix staminaDrainJump = Fix.of(kStaminaDrainJump);
+
+  /// Stamina drained per tick of movement.
+  static const Fix staminaDrainMove = Fix.of(kStaminaDrainMove);
+
+  /// Stamina regained per tick while idle and grounded.
+  static const Fix staminaRegen = Fix.of(kStaminaRegen);
+
+  /// Stamina level below which the low-stamina effort debuff applies.
+  static const Fix staminaDebuffThreshold = Fix.of(kStaminaDebuffThreshold);
+
+  /// Minimum effort multiplier when stamina is fully depleted.
+  static const Fix staminaMinMultiplier = Fix.of(kStaminaMinMultiplier);
+
+  /// Power multiplier for the weak pop-up return of an imperfectly timed
+  /// smash block (M1-035).
+  static const Fix imperfectBlockPower = Fix.of(kImperfectBlockPowerMultiplier);
 
   // -- Shuttle --------------------------------------------------------------
 
