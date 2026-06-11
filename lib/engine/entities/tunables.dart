@@ -23,6 +23,13 @@ abstract final class Tunables {
   /// The y coordinate of the ground plane (player feet rest here).
   static const Fix groundY = Fix.of(kGroundY);
 
+  /// Height of the net-cord (tape) band below the net top.
+  static const Fix netTapeHeight = Fix.of(kNetTapeHeight);
+
+  /// The y coordinate of the bottom of the net-cord band. A net-plane crossing
+  /// at or above this y (but at/below [netTopY]) is a net-cord hit.
+  static const Fix netTapeBottomY = Fix.of(kNetTopY + kNetTapeHeight);
+
   /// The leftmost playable x (outer court boundary).
   static const Fix courtLeftBound = Fix.of(kCourtLeftBound);
 
@@ -49,8 +56,40 @@ abstract final class Tunables {
   /// Peak height of a jump above the ground, in game units.
   static const Fix playerJumpHeight = Fix.of(kPlayerJumpHeight);
 
-  /// Maximum starting stamina.
+  /// Extra reach the racquet adds to the player hitbox on the facing side
+  /// (and upward), in game units.
+  static const Fix racquetReach = Fix.of(kRacquetReach);
+
+  /// Speed multiplier applied to an airborne smash (the jump smash).
+  static const Fix jumpSmashBonus = Fix.of(kJumpSmashBonus);
+
+  /// Maximum (and starting) stamina.
   static const Fix staminaMax = Fix.of(kStaminaMax);
+
+  /// Stamina drained by a normal (or drop) shot.
+  static const Fix staminaDrainNormal = Fix.of(kStaminaDrainNormal);
+
+  /// Stamina drained by a smash.
+  static const Fix staminaDrainSmash = Fix.of(kStaminaDrainSmash);
+
+  /// Stamina drained by a jump.
+  static const Fix staminaDrainJump = Fix.of(kStaminaDrainJump);
+
+  /// Stamina drained per tick of movement.
+  static const Fix staminaDrainMove = Fix.of(kStaminaDrainMove);
+
+  /// Stamina regained per tick while idle and grounded.
+  static const Fix staminaRegen = Fix.of(kStaminaRegen);
+
+  /// Stamina level below which the low-stamina effort debuff applies.
+  static const Fix staminaDebuffThreshold = Fix.of(kStaminaDebuffThreshold);
+
+  /// Minimum effort multiplier when stamina is fully depleted.
+  static const Fix staminaMinMultiplier = Fix.of(kStaminaMinMultiplier);
+
+  /// Power multiplier for the weak pop-up return of an imperfectly timed
+  /// smash block (M1-035).
+  static const Fix imperfectBlockPower = Fix.of(kImperfectBlockPowerMultiplier);
 
   // -- Shuttle --------------------------------------------------------------
 
@@ -59,4 +98,45 @@ abstract final class Tunables {
 
   /// Maximum shuttle speed in game units per tick (stability safeguard).
   static const Fix shuttleMaxVelocity = Fix.of(kShuttleMaxVelocity);
+
+  /// Velocity-scaling factor applied when the shuttle clips the net cord.
+  static const Fix netCordDamping = Fix.of(kNetCordDamping);
+
+  /// Quadratic-drag coefficient for normal shuttle flight (the rally default).
+  static const Fix shuttleDragCoefficient = Fix.of(kShuttleDragCoefficient);
+
+  /// Quadratic-drag coefficient for drop shots (higher, bleeds speed faster).
+  static const Fix shuttleDropShotDrag = Fix.of(kShuttleDropShotDrag);
+
+  // -- Shots ----------------------------------------------------------------
+
+  /// Launch speed of a normal clear/drive shot, in game units per tick.
+  static const Fix normalShotSpeed = Fix.of(kNormalShotSpeed);
+
+  /// Minimum launch angle of a normal shot, in radians.
+  static const Fix normalShotAngleMin = Fix.of(kNormalShotAngleMin);
+
+  /// Maximum launch angle of a normal shot, in radians.
+  static const Fix normalShotAngleMax = Fix.of(kNormalShotAngleMax);
+
+  /// Launch speed of a smash, in game units per tick.
+  static const Fix smashSpeed = Fix.of(kSmashSpeed);
+
+  /// Minimum launch angle of a smash, in radians.
+  static const Fix smashAngleMin = Fix.of(kSmashAngleMin);
+
+  /// Maximum launch angle of a smash, in radians.
+  static const Fix smashAngleMax = Fix.of(kSmashAngleMax);
+
+  /// Launch speed of a drop shot, in game units per tick.
+  static const Fix dropShotSpeed = Fix.of(kDropShotSpeed);
+
+  /// Launch angle of a drop shot, in radians (fixed, no spread).
+  static const Fix dropShotAngle = Fix.of(kDropShotAngle);
+
+  /// Launch speed of a serve toss, in game units per tick.
+  static const Fix tossSpeed = Fix.of(kTossSpeed);
+
+  /// Launch angle of a serve toss, in radians (fixed, no spread).
+  static const Fix tossAngle = Fix.of(kTossAngle);
 }
