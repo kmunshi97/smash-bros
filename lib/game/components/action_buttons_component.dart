@@ -54,6 +54,14 @@ class _ActionButton extends PositionComponent with TapCallbacks {
   Color _color;
   bool _pressed = false;
 
+  static final TextPaint _textPaint = TextPaint(
+    style: const TextStyle(
+      fontSize: 22,
+      color: GamePalette.courtLines,
+      fontWeight: FontWeight.bold,
+    ),
+  );
+
   /// Updates the button's label, action, and colour (used by the serve slot).
   void reconfigure({
     required String label,
@@ -90,13 +98,7 @@ class _ActionButton extends PositionComponent with TapCallbacks {
       _kButtonRadius,
       paint,
     );
-    TextPaint(
-      style: const TextStyle(
-        fontSize: 22,
-        color: GamePalette.courtLines,
-        fontWeight: FontWeight.bold,
-      ),
-    ).render(
+    _textPaint.render(
       canvas,
       _label,
       Vector2(_kButtonRadius, _kButtonRadius),
@@ -183,7 +185,7 @@ class ActionButtonsComponent extends Component
       _primaryButton.reconfigure(
         label: 'TOSS',
         onPress: game.controls.pressToss,
-        color: const Color(0xFFFFD700), // gold — visually distinct cue
+        color: GamePalette.serveAccent,
       );
     } else {
       _primaryButton.reconfigure(

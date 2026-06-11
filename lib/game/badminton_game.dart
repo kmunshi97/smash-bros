@@ -230,7 +230,11 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     KeyEvent event,
     Set<LogicalKeyboardKey> keysPressed,
   ) {
-    final isDown = event is KeyDownEvent || event is KeyRepeatEvent;
+    // OS key-repeat must not re-fire edge-triggered one-shots (holding J
+    // would spam pressSmash ~30×/s). Hold keys are level-tracked from the
+    // original down event, so repeats carry no information for us either way.
+    if (event is KeyRepeatEvent) return KeyEventResult.ignored;
+    final isDown = event is KeyDownEvent;
     final isUp = event is KeyUpEvent;
     if (!isDown && !isUp) return KeyEventResult.ignored;
 
