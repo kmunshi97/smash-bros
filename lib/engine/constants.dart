@@ -27,13 +27,6 @@ const double kNetX = kCourtWidth / 2;
 /// sits above the ground).
 const double kNetTopY = 350;
 
-/// Height of the net-cord band (the tape) below the net top.
-///
-/// A sweep crossing the net plane within `[kNetTopY, kNetTopY + kNetTapeHeight]`
-/// is a tape (net-cord) hit rather than a net-body hit. Above the band is clean
-/// passage; below it is a solid net-body hit.
-const double kNetTapeHeight = 8;
-
 /// Y coordinate of the ground plane.
 const double kGroundY = 600;
 
@@ -77,15 +70,6 @@ const double kPlayer1StartX = kCourtLeftBound + 120;
 /// Starting x of player 2 (right side).
 const double kPlayer2StartX = kCourtRightBound - 120;
 
-/// Extra horizontal and vertical reach the racquet adds to the player hitbox
-/// on the facing side (and upward), in game units. Models the racquet arm
-/// extending the effective contact zone in front of and above the body.
-const double kRacquetReach = 40;
-
-/// Speed multiplier applied to a smash hit while the player is airborne — the
-/// genre-defining jump smash hits harder than a grounded smash.
-const double kJumpSmashBonus = 1.15;
-
 // ---------------------------------------------------------------------------
 // Shuttle
 // ---------------------------------------------------------------------------
@@ -104,12 +88,6 @@ const double kShuttleMaxVelocity = 20;
 
 /// Shuttle collision radius in game units.
 const double kShuttleRadius = 6;
-
-/// Velocity-scaling factor applied when the shuttle clips the net cord (tape).
-///
-/// A net-cord hit damps the shuttle but lets it continue; its velocity is
-/// multiplied by this factor.
-const double kNetCordDamping = 0.5;
 
 /// Launch speed of a normal clear/drive shot.
 const double kNormalShotSpeed = 8;
@@ -157,14 +135,6 @@ const int kSwingAnimationFrames = 12;
 /// Duration of a stun, in frames.
 const int kStunDurationFrames = 60;
 
-/// Upper bound on the block-timing lookahead simulation (M1-035).
-///
-/// The defender-swing block timing is measured by forward-simulating a clone
-/// of the shuttle for at most this many ticks to find its arrival tick. The
-/// cost of `StunSystem.evaluateBlockTiming` is therefore bounded at this many
-/// `Shuttle.integrate` calls per defender swing.
-const int kBlockLookaheadMaxTicks = 30;
-
 /// Frames before a serve times out.
 const int kServeTimeoutFrames = 300;
 
@@ -196,10 +166,6 @@ const double kStaminaDebuffThreshold = 30;
 /// Minimum action multiplier when stamina is fully depleted.
 const double kStaminaMinMultiplier = 0.5;
 
-/// Power multiplier for the weak pop-up return of an imperfectly timed smash
-/// block (M1-035). An imperfect block still connects but returns a feeble lob.
-const double kImperfectBlockPowerMultiplier = 0.5;
-
 // ---------------------------------------------------------------------------
 // Scoring
 // ---------------------------------------------------------------------------
@@ -215,12 +181,6 @@ const int kDeuceLeadRequired = 2;
 
 /// Hard score cap that ends deuce regardless of lead.
 const int kDeuceCap = 15;
-
-/// Ticks spent in the `pointScored` phase before the next serve.
-///
-/// At 60 ticks/sec this is 1.5 s of "point!" presentation time, giving the HUD
-/// room to show the winner of the point before play resets.
-const int kPointPauseTicks = 90;
 
 // ---------------------------------------------------------------------------
 // Rollback / Netcode (Milestone 3, defined early for buffer sizing)
