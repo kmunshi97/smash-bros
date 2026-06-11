@@ -1,0 +1,159 @@
+import 'package:flame/components.dart';
+import 'package:flame/events.dart';
+import 'package:flutter/painting.dart';
+import 'package:smash_bros/game/badminton_game.dart';
+import 'package:smash_bros/game/palette.dart';
+
+// ---------------------------------------------------------------------------
+// MovePadComponent — M1-025
+//
+// Renders two side-by-side d-pad buttons (◀ ▶) anchored to the bottom-left
+// of the HUD viewport. Touch events drive moveLeft / moveRight hold flags on
+// the game's LocalControlState.
+//
+// Physical-size reasoning
+// -----------------------
+// The Flame camera is configured for a fixed 1280×720 game-unit space. On a
+// typical phone (~360dp logical width in landscape) that maps to roughly
+// 0.28 dp per game unit (360/1280). A 110-game-unit pad therefore covers
+// ≈30.8 dp. That is still below the 48dp minimum for interactive targets, so
+// we size generously: each pad is 110 game units wide × 90 game units tall,
+// reaching ≈30 dp on a narrow phone BUT the viewport letterboxes onto the full
+// physical width — in practice the game area fills ≈ full phone width in
+// landscape giving ≈1.0 dp per game unit, so 110 units → 110 dp, well above
+// the 48 dp floor. The comment is left here so any resolution change triggers a
+// deliberate revisit.
+// ---------------------------------------------------------------------------
+
+const _kPadWidth = 110.0;
+const _kPadHeight = 90.0;
+const _kPadSpacing = 8.0;
+const _kPadCornerRadius = 16.0;
+const _kEdgeMargin = 12.0; // gap from viewport edge (before safe-area offset)
+
+/// A single rounded-rect pad that tracks one directional hold.
+class _DirPad extends PositionComponent with TapCallbacks {
+  _DirPad({
+    required this.label,
+    required this.onDown,
+    required this.onUp,
+    required Vector2 position,
+  }) : super(
+         position: position,
+         size: Vector2(_kPadWidth, _kPadHeight),
+       );
+
+  final String label;
+  final void Function() onDown;
+  final void Function() onUp;
+
+  bool _pressed = false;
+
+  static final Paint _normalPaint = Paint()
+    ..color = GamePalette.leftPlayer.withAlpha(140);
+  static final Paint _pressedPaint = Paint()
+    ..color = GamePalette.leftPlayer.withAlpha(230);
+
+  late final TextPaint _textPaint = TextPaint(
+    style: const TextStyle(
+      fontSize: 36,
+      color: GamePalette.courtLines,
+      fontWeight: FontWeight.bold,
+    ),
+  );
+
+  final RRect _rrect = RRect.fromLTRBR(
+    0,
+    0,
+    _kPadWidth,
+    _kPadHeight,
+    const Radius.circular(_kPadCornerRadius),
+  );
+
+  @override
+  void onTapDown(TapDownEvent event) {
+    _pressed = true;
+    onDown();
+  }
+
+  @override
+  void onTapUp(TapUpEvent event) {
+    _pressed = false;
+    onUp();
+  }
+
+  @override
+  void onTapCancel(TapCancelEvent event) {
+    _pressed = false;
+    onUp();
+  }
+
+  @override
+  void render(Canvas canvas) {
+    canvas.drawRRect(_rrect, _pressed ? _pressedPaint : _normalPaint);
+    _textPaint.render(
+      canvas,
+      label,
+      Vector2(_kPadWidth / 2, _kPadHeight / 2),
+      anchor: Anchor.center,
+    );
+  }
+}
+
+/// Two side-by-side d-pad pads (◀ ▶) added to the camera viewport (HUD space).
+///
+/// Anchored to the bottom-left corner. Pass an [EdgeInsets] of safe-area
+/// padding (in game units) to offset away from notches/home-bar.
+class MovePadComponent extends Component with HasGameReference<BadmintonGame> {
+  /// Creates the d-pad cluster.
+  ///
+  /// [safeArea] is in game units; bottom and left insets are applied to the
+  /// anchor position so the buttons clear the device notch / home bar.
+  MovePadComponent({required this.safeArea});
+
+  /// Safe-area padding in game units. Updated each frame via
+  /// [BadmintonGame.safeArea]; applied on the next [update] call.
+  EdgeInsets safeArea;
+
+  late _DirPad _leftPad;
+  late _DirPad _rightPad;
+  bool _loaded = false;
+
+  @override
+  Future<void> onLoad() async {
+    await super.onLoad();
+    _leftPad = _DirPad(
+      label: '◀',
+      position: _leftPos(),
+      onDown: () => game.controls.moveLeft = true,
+      onUp: () => game.controls.moveLeft = false,
+    );
+    _rightPad = _DirPad(
+      label: '▶',
+      position: _rightPos(),
+      onDown: () => game.controls.moveRight = true,
+      onUp: () => game.controls.moveRight = false,
+    );
+    await addAll([_leftPad, _rightPad]);
+    _loaded = true;
+  }
+
+  @override
+  void update(double dt) {
+    if (!_loaded) return;
+    _leftPad.position = _leftPos();
+    _rightPad.position = _rightPos();
+  }
+
+  Vector2 _leftPos() {
+    final viewportSize = game.camera.viewport.size;
+    final x = _kEdgeMargin + safeArea.left;
+    final y = viewportSize.y - _kEdgeMargin - safeArea.bottom - _kPadHeight;
+    return Vector2(x, y);
+  }
+
+  Vector2 _rightPos() {
+    final p = _leftPos();
+    return Vector2(p.x + _kPadWidth + _kPadSpacing, p.y);
+  }
+}

@@ -1,7 +1,9 @@
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
+import 'package:flame/input.dart';
 // `Simulation` in flutter/widgets.dart (physics) conflicts with our engine's
 // Simulation; hide the Flutter one to resolve the ambiguity.
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' hide Simulation;
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
@@ -9,8 +11,9 @@ import 'package:smash_bros/engine/render/render_state.dart';
 import 'package:smash_bros/engine/sim/fixed_timestep_driver.dart';
 import 'package:smash_bros/engine/sim/simulation.dart';
 import 'package:smash_bros/game/components/components.dart';
+import 'package:smash_bros/game/input/local_control_state.dart';
 
-/// The Flame game host for Arcade Badminton (M1-020).
+/// The Flame game host for Arcade Badminton (M1-020, extended in M1-025).
 ///
 /// ## ADR-7 — Fixed-timestep render loop
 ///
@@ -30,7 +33,22 @@ import 'package:smash_bros/game/components/components.dart';
 /// **never** touch the simulation or its `GameState` directly. One-off events
 /// (sound, VFX) must be consumed via [takeEvents]; events are guaranteed to
 /// arrive exactly once per tick regardless of the display rate.
-class BadmintonGame extends FlameGame {
+///
+/// ## Keyboard (desktop dev target)
+///
+/// Keyboard input exists purely for the macOS desktop feel-tuning loop
+/// (CLAUDE.md dev target). The shipping input path for Android/iOS is touch
+/// (see [MovePadComponent] and [ActionButtonsComponent]).
+///
+/// Key mapping:
+///   ←/A            → moveLeft hold
+///   →/D            → moveRight hold
+///   Space          → jump
+///   J              → smash
+///   K              → drop shot
+///   L              → normal shot
+///   T              → serve toss
+class BadmintonGame extends FlameGame with KeyboardEvents {
   /// Creates a game with a deterministic [seed], the given [firstServer], and
   /// a match played to [targetScore].
   BadmintonGame({
@@ -50,6 +68,12 @@ class BadmintonGame extends FlameGame {
        ) {
     _driver = FixedTimestepDriver(
       onTick: () {
+        // Write the local player's input for the current frame BEFORE ticking.
+        // Drain exactly once per simulation tick (not per render frame).
+        _simulation.state.leftInputs.set(
+          _simulation.state.frame,
+          controls.drainTick(),
+        );
         _simulation.tick();
         _previous = _current;
         _current = RenderState.capture(_simulation);
@@ -61,6 +85,12 @@ class BadmintonGame extends FlameGame {
   final Simulation _simulation;
   late final FixedTimestepDriver _driver;
 
+  /// The mutable input accumulator for the local (left) player.
+  ///
+  /// Touch components and the keyboard handler write into this; the driver's
+  /// onTick drains it once per simulation tick.
+  final LocalControlState controls = LocalControlState();
+
   // Snapshot pair for interpolation.
   late RenderState _previous;
   late RenderState _current;
@@ -70,6 +100,13 @@ class BadmintonGame extends FlameGame {
 
   // Events accumulated from captured snapshots since the last [takeEvents].
   final List<RenderEvent> _pendingEvents = [];
+
+  // Current safe-area insets in game units (updated by GameScreen each frame).
+  EdgeInsets _safeArea = EdgeInsets.zero;
+
+  // Touch control components — kept so safeArea can be forwarded on set.
+  late MovePadComponent _movePad;
+  late ActionButtonsComponent _actionButtons;
 
   // -- Debug HUD (replaced by the real HUD in M1-026) -----------------------
 
@@ -120,6 +157,14 @@ class BadmintonGame extends FlameGame {
     await world.add(PlayerComponent(CourtSide.left));
     await world.add(PlayerComponent(CourtSide.right));
     await world.add(ShuttleComponent());
+
+    // -- Touch controls (M1-025) added to viewport (HUD space) ---------------
+    // Each component handles its own safe-area insets; updates its anchor
+    // position in update() each frame as safeArea changes.
+    _movePad = MovePadComponent(safeArea: _safeArea);
+    _actionButtons = ActionButtonsComponent(safeArea: _safeArea);
+    await camera.viewport.add(_movePad);
+    await camera.viewport.add(_actionButtons);
   }
 
   @override
@@ -142,6 +187,24 @@ class BadmintonGame extends FlameGame {
   /// identical object without re-lerping.
   RenderState get view => _view;
 
+  /// The current safe-area insets in game units.
+  EdgeInsets get safeArea => _safeArea;
+
+  /// Updates the safe-area insets (in game units) used to offset touch controls.
+  ///
+  /// Called by the game screen each build with the current device padding
+  /// converted to game units. The two control components pick this up on their
+  /// next `update` call.
+  set safeArea(EdgeInsets value) {
+    _safeArea = value;
+    // Forward to the components only after onLoad (they may not exist yet on
+    // first set during the widget build before onLoad completes).
+    if (isLoaded) {
+      _movePad.safeArea = value;
+      _actionButtons.safeArea = value;
+    }
+  }
+
   /// Returns all [RenderEvent]s accumulated since the last call and clears the
   /// pending queue.
   ///
@@ -153,6 +216,66 @@ class BadmintonGame extends FlameGame {
     final copy = List<RenderEvent>.unmodifiable(_pendingEvents);
     _pendingEvents.clear();
     return copy;
+  }
+
+  // -- Keyboard input (macOS desktop feel-tuning target) ---------------------
+  //
+  // Keyboard exists for the desktop feel-tuning loop (CLAUDE.md dev target);
+  // touch is the shipping input path (Android/iOS). The key→action mapping
+  // lives in [handleKeyChange] so tests can exercise the pure mapping logic
+  // without synthesising raw [KeyEvent] instances.
+
+  @override
+  KeyEventResult onKeyEvent(
+    KeyEvent event,
+    Set<LogicalKeyboardKey> keysPressed,
+  ) {
+    final isDown = event is KeyDownEvent || event is KeyRepeatEvent;
+    final isUp = event is KeyUpEvent;
+    if (!isDown && !isUp) return KeyEventResult.ignored;
+
+    final consumed = handleKeyChange(event.logicalKey, isDown: isDown);
+    return consumed ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  /// Maps a keyboard key to a [controls] action and applies it.
+  ///
+  /// Returns `true` if the key is one this game consumes; `false` otherwise.
+  /// Extracted as a named method so unit tests can call it directly without
+  /// constructing raw [KeyEvent] objects.
+  bool handleKeyChange(LogicalKeyboardKey key, {required bool isDown}) {
+    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) {
+      controls.moveLeft = isDown;
+      return true;
+    }
+    if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.keyD) {
+      controls.moveRight = isDown;
+      return true;
+    }
+    if (isDown) {
+      if (key == LogicalKeyboardKey.space) {
+        controls.pressJump();
+        return true;
+      }
+      if (key == LogicalKeyboardKey.keyJ) {
+        controls.pressSmash();
+        return true;
+      }
+      if (key == LogicalKeyboardKey.keyK) {
+        controls.pressDrop();
+        return true;
+      }
+      if (key == LogicalKeyboardKey.keyL) {
+        controls.pressNormal();
+        return true;
+      }
+      if (key == LogicalKeyboardKey.keyT) {
+        controls.pressToss();
+        return true;
+      }
+    }
+    return false;
   }
 
   // -- Lifecycle -------------------------------------------------------------
