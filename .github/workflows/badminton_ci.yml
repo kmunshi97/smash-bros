@@ -31,6 +31,16 @@ jobs:
       - name: Run analysis
         run: flutter analyze --fatal-infos
 
+      - name: Check engine purity (pure Dart, no Flutter/Flame imports)
+        run: |
+          MATCHES=$(grep -rnE "import 'package:(flutter|flame)" lib/engine/ || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::lib/engine/ must stay pure Dart (see CLAUDE.md). Offending imports:"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "Engine purity check passed."
+
   test:
     name: Tests
     runs-on: ubuntu-latest
