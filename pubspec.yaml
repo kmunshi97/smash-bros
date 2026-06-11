@@ -18,6 +18,9 @@ dependencies:
   flutter_bloc: ^9.1.1
   equatable: ^2.0.8
 
+  # Annotations (pure Dart — safe for lib/engine)
+  meta: ^1.16.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
