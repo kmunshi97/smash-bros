@@ -473,4 +473,78 @@ void main() {
       );
     });
   });
+
+  group('serve shuttle pin (M1-014b)', () {
+    /// The expected parked shuttle x for the left server's current position.
+    Fix expectedPinX(Simulation sim) =>
+        sim.state.leftPlayer.x + Tunables.serveShuttleOffsetX;
+
+    test('shuttle tracks the server while walking during servePending', () {
+      final sim = Simulation(seed: 1)..start();
+      expect(sim.state.fsm.phase, MatchPhase.servePending);
+      expect(sim.state.fsm.server, CourtSide.left);
+
+      // Walk the left server right for 30 ticks; the shuttle must keep the
+      // serve offset relative to the server's hand on every tick.
+      _hold(sim.state.leftInputs, InputAction.moveRight, 0, 29);
+      for (var i = 0; i < 30; i++) {
+        sim.tick();
+        expect(
+          sim.state.shuttle.position.x.toDouble(),
+          closeTo(expectedPinX(sim).toDouble(), 1e-9),
+          reason: 'tick $i: parked shuttle must track the server x',
+        );
+        expect(
+          sim.state.shuttle.position.y.toDouble(),
+          closeTo(
+            (Tunables.groundY - Tunables.serveShuttleHeight).toDouble(),
+            1e-9,
+          ),
+          reason: 'tick $i: parked shuttle stays at the serve height',
+        );
+      }
+      // Sanity: the server actually moved (the pin is being exercised).
+      expect(
+        sim.state.leftPlayer.x.toDouble(),
+        greaterThan(kPlayer1StartX),
+        reason: 'precondition: the server must have walked rightward',
+      );
+    });
+
+    test('shuttle does NOT follow the receiver during servePending', () {
+      final sim = Simulation(seed: 1)..start();
+      expect(sim.state.fsm.server, CourtSide.left);
+
+      final parkedX = sim.state.shuttle.position.x.toDouble();
+      // Walk the RECEIVER (right player); the server stays put.
+      _hold(sim.state.rightInputs, InputAction.moveLeft, 0, 29);
+      for (var i = 0; i < 30; i++) {
+        sim.tick();
+      }
+      expect(
+        sim.state.shuttle.position.x.toDouble(),
+        closeTo(parkedX, 1e-9),
+        reason: 'receiver movement must not drag the parked shuttle',
+      );
+    });
+
+    test('pin releases once the toss launches (shuttle flies in inPlay)', () {
+      final sim = Simulation(seed: 1)..start();
+      _enqueueServe(sim, holdTicks: 5);
+      _tickUntil(sim, () => sim.state.fsm.phase == MatchPhase.inPlay);
+      expect(sim.state.fsm.phase, MatchPhase.inPlay);
+
+      // Let the shuttle fly: its y must change across ticks (no longer
+      // pinned at the serve height).
+      final y0 = sim.state.shuttle.position.y.toDouble();
+      sim
+        ..tick()
+        ..tick();
+      expect(
+        sim.state.shuttle.position.y.toDouble(),
+        isNot(closeTo(y0, 1e-9)),
+        reason: 'after launch the shuttle must be in free flight, not pinned',
+      );
+    });
+  });
 }

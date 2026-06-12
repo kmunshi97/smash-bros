@@ -35,7 +35,9 @@ import 'package:smash_bros/engine/systems/stun_system.dart';
 ///    `preMatch`/`matchOver` do nothing. Serve placement happens on every entry
 ///    into `servePending`.
 /// 3. **Movement + jump** (`servePending`/`inPlay`) — horizontal movement
-///    (stamina-scaled, stun-gated) and jump start/advance.
+///    (stamina-scaled, stun-gated) and jump start/advance. During
+///    `servePending` the parked shuttle is then re-pinned to the server's
+///    hand so it tracks the server's walk (M1-014b).
 /// 4. **Swing resolution** (`inPlay`) — decode each player's shot, resolve a
 ///    simultaneous swing by shuttle side (M1-015), evaluate block timing
 ///    (M1-035), launch via [ShotSystem.trySwing], charge stamina, stun on an
@@ -126,6 +128,7 @@ final class Simulation {
     final inputs = _readInputs();
     _pumpPhase(inputs);
     _movement(inputs);
+    _pinServeShuttle();
     _swings(inputs);
     _physics();
     _collision();
@@ -450,6 +453,32 @@ final class Simulation {
 
     _state.rally.reset();
     _state.serveChargeTicks = 0;
+  }
+
+  /// Re-pins the parked shuttle to the server while `servePending`.
+  ///
+  /// Runs every tick directly after movement (step 3): the server may walk
+  /// during serve positioning (M1-014), so the shuttle must track the
+  /// server's hand — same offset/height as the initial [_placeForServe]
+  /// placement — or the toss would launch from wherever the server stood when
+  /// the phase began. No-op in every other phase (the shuttle is in flight
+  /// or the world is frozen).
+  void _pinServeShuttle() {
+    if (_state.fsm.phase != MatchPhase.servePending) {
+      return;
+    }
+    final serverSide = _state.fsm.server;
+    final server = _state.playerOn(serverSide);
+    final dir = serverSide == CourtSide.left ? Fix.one : -Fix.one;
+    final pinned = FixVec2(
+      server.x + Tunables.serveShuttleOffsetX * dir,
+      Tunables.groundY - Tunables.serveShuttleHeight,
+    );
+    // The pin is a teleport, not flight: keep previousPosition in lockstep so
+    // the swept-collision segment is empty if a toss launches next tick.
+    _state.shuttle
+      ..position = pinned
+      ..previousPosition = pinned;
   }
 
   /// Whether the current phase moves players and ticks their resources.
