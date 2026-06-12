@@ -1,6 +1,7 @@
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/painting.dart';
+import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
@@ -178,10 +179,14 @@ class MovePadComponent extends Component with HasGameReference<BadmintonGame> {
     _rightPad.position = _rightPos();
   }
 
+  // Anchored against the VIRTUAL resolution (kCourtHeight): viewport children
+  // render in virtual coordinates, so anchoring against
+  // `camera.viewport.size` (the device size) floats the pad off the
+  // bottom-left corner on any display whose logical size differs from
+  // 1280×720 (e.g. desktop windows).
   Vector2 _leftPos() {
-    final viewportSize = game.camera.viewport.size;
     final x = _kEdgeMargin + safeArea.left;
-    final y = viewportSize.y - _kEdgeMargin - safeArea.bottom - _kPadHeight;
+    final y = kCourtHeight - _kEdgeMargin - safeArea.bottom - _kPadHeight;
     return Vector2(x, y);
   }
 

@@ -22,6 +22,7 @@ import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/game/badminton_game.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   // Helper: creates a fresh BadmintonGame using flame_test's proper lifecycle.
   Future<BadmintonGame> buildGame({int seed = 7}) =>
       initializeGame(() => BadmintonGame(seed: seed));

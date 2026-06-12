@@ -8,8 +8,11 @@ import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
 import 'package:smash_bros/engine/rules/match_phase.dart';
 import 'package:smash_bros/game/badminton_game.dart';
+import 'package:smash_bros/game/input/local_control_state.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   Future<BadmintonGame> buildGame({int seed = 7}) =>
       initializeGame(() => BadmintonGame(seed: seed));
 
@@ -163,11 +166,23 @@ void main() {
       game.onRemove();
     });
 
-    test('J (isDown) schedules smash', () async {
+    test('J (isDown) starts the jump-smash combo (M1-036)', () async {
       final game = await buildGame();
+      // The player starts grounded, so J = jump now + smash at the apex —
+      // identical semantics to the touch JUMP&SMASH button.
       game.handleKeyChange(LogicalKeyboardKey.keyJ, isDown: true);
       final mask = game.controls.drainTick();
-      expect((mask & 0x10) != 0, isTrue); // InputAction.smash = 1<<4
+      expect((mask & 0x04) != 0, isTrue); // InputAction.jump = 1<<2
+      expect((mask & 0x10) != 0, isFalse); // smash NOT immediate when grounded
+
+      // Smash fires exactly kJumpSmashApexDelayTicks drains later.
+      for (var i = 1; i < kJumpSmashApexDelayTicks; i++) {
+        expect((game.controls.drainTick() & 0x10) != 0, isFalse);
+      }
+      expect(
+        (game.controls.drainTick() & 0x10) != 0,
+        isTrue, // InputAction.smash = 1<<4 at the apex drain
+      );
       game.onRemove();
     });
 

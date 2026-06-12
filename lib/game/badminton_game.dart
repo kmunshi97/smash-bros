@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/input.dart';
@@ -62,10 +63,13 @@ import 'package:smash_bros/game/input/local_control_state.dart';
 ///   ←/A            → moveLeft hold
 ///   →/D            → moveRight hold
 ///   T              → tossHeld hold (hold to charge, release to serve)
-///   Space          → jump
-///   J              → smash
+///   Space          → plain jump (kept for dev experiments; the shipping
+///                    control is the merged jump-smash below)
+///   J              → jump & smash combo: grounded = jump now + smash at the
+///                    jump apex; airborne = smash immediately (M1-036 —
+///                    mirrors the touch JUMP&SMASH button exactly)
 ///   K              → drop shot
-///   L              → normal shot
+///   L              → rally (normal) shot
 class BadmintonGame extends FlameGame with KeyboardEvents {
   /// Creates a game with a deterministic [seed], the given [firstServer], and
   /// a match played to [targetScore].
@@ -93,7 +97,33 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
          ),
        ) {
     _initDriver();
+    rightCharacter = _pickOpponent(seed);
   }
+
+  /// Picks the opponent character for a match from its [seed].
+  ///
+  /// Pure game-layer presentation: the engine never sees the character
+  /// choice, so this does not touch the simulation's seeded PRNG stream.
+  static CharacterType _pickOpponent(int seed) {
+    const opponents = [
+      CharacterType.mukesh,
+      CharacterType.jeff,
+      CharacterType.elon,
+    ];
+    return opponents[math.Random(seed).nextInt(opponents.length)];
+  }
+
+  /// The character type for the left player (always red astronaut).
+  final CharacterType leftCharacter = CharacterType.astronautRed;
+
+  /// The randomly selected character type for the opponent (right player).
+  late CharacterType rightCharacter;
+
+  /// Cached character sprites.
+  late final Sprite astronautRedSprite;
+  late final Sprite mukeshSprite;
+  late final Sprite jeffSprite;
+  late final Sprite elonSprite;
 
   Simulation _simulation;
   AIController? _rightAi;
@@ -162,6 +192,12 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+
+    // Cache the character sprites
+    astronautRedSprite = await loadSprite('player_red_astronaut.png');
+    mukeshSprite = await loadSprite('opponent_mukesh.png');
+    jeffSprite = await loadSprite('opponent_jeff.png');
+    elonSprite = await loadSprite('opponent_elon.png');
 
     // Boot the engine and capture the initial state into both slots so the
     // first [view] call never reads uninitialised memory.
@@ -318,6 +354,9 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
     _pendingEvents.clear();
     _frameEvents = const [];
+
+    // Re-randomize the opponent character for the new match.
+    rightCharacter = _pickOpponent(seed);
   }
 
   // -- Keyboard input (macOS desktop feel-tuning target) ---------------------
@@ -373,7 +412,10 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
         return true;
       }
       if (key == LogicalKeyboardKey.keyJ) {
-        controls.pressSmash();
+        // Merged jump-smash (M1-036): same semantics as the touch button.
+        controls.pressJumpSmash(
+          airborne: view.leftPlayer.feetY < kGroundY,
+        );
         return true;
       }
       if (key == LogicalKeyboardKey.keyK) {
@@ -409,4 +451,12 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
         break;
     }
   }
+}
+
+/// The type of characters available in the game.
+enum CharacterType {
+  astronautRed,
+  mukesh,
+  jeff,
+  elon,
 }

@@ -29,6 +29,8 @@ import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/components/hud/hud.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   Future<BadmintonGame> buildGame({int seed = 7}) =>
       initializeGame(() => BadmintonGame(seed: seed));
 

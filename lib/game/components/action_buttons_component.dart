@@ -3,61 +3,81 @@ import 'dart:math' as math;
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/painting.dart';
+import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/rules/match_phase.dart';
 import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
 // ---------------------------------------------------------------------------
-// ActionButtonsComponent — M1-025 (reskinned M1-027, arc layout M1-035v)
+// ActionButtonsComponent — M1-025 (reskinned M1-027, tray layout M1-036)
 //
-// Cluster of circular action buttons anchored to the bottom-right corner in a
-// quarter-circle FAN rather than a 2×2 grid. The PRIMARY button (SMASH/TOSS,
-// radius 48) sits innermost; JUMP (radius 40) is above it; CLEAR (radius 40)
-// is to its left; DROP (radius 36) is on the diagonal between JUMP and CLEAR.
+// Compact bottom-right button cluster with context-sensitive visibility.
 //
-// Visual: same chunky circular style (orange-gold, bevel, outline) as M1-027.
-//   • TOSS slot retains serveAccent face colour and charge-arc ring.
-//   • Pressed state fills the face with buttonPressed (brighter gold).
+// ## Layout (rally / returning state)
 //
-// Serve-slot context sensitivity (UNCHANGED from M1-025/027):
-//   Primary slot shows SMASH during normal rally, TOSS during servePending
-//   when the local player (left) is serving. Hold/release semantics and the
-//   charge arc are preserved exactly.
+// Three circular buttons hug the bottom-right corner in a tight tray:
+//
+//   • JUMP & SMASH (primary, radius 48) — innermost, at the corner.
+//     Two-line label "JUMP\nSMASH". On tap it calls
+//     game.controls.pressJumpSmash(airborne: <derived from view>) — the
+//     combo issues a jump + delayed apex smash when grounded, or an
+//     immediate smash when already airborne.
+//
+//   • RALLY (radius 40) — directly left of the primary with a _kGap spacing.
+//     Renamed from CLEAR; calls pressNormal.
+//
+//   • DROP (radius 40) — directly above the primary with a _kGap spacing.
+//     Calls pressDrop.
+//
+// Cluster footprint: primary centre is ~70 units from the corner along the
+// 45° diagonal; RALLY and DROP are adjacent. Total extent ≤ 230 units from
+// the corner. All buttons are ≥ 48dp diameter (primary = 96dp, others = 80dp).
+//
+// ## Serving state
+//
+// When view.phase == MatchPhase.servePending && view.server == CourtSide.left:
+//   • ONLY the TOSS button is shown at the primary's corner position.
+//   • RALLY and DROP are hidden (removed from the component tree) and
+//     non-tappable while serving.
+//   • The TOSS button uses hold/release semantics with a charge-arc ring,
+//     identical to the pre-M1-036 primary slot.
+//   • When the slot flips away from serving, any stale tossHeld is cleared.
+//
+// ## Serve-slot flip implementation
+//
+// RALLY and DROP are added/removed from the tree when the serving state flips.
+// The flip is detected by diffing _serving across update() calls. Guard:
+// add/remove only on the tick of the flip, not every frame.
+//
+// ## Visual style
+//
+// Unchanged from M1-027: chunky orange-gold face, bevel highlight, dark
+// outline, pressed fill, and charge-arc ring for the TOSS slot. Palette
+// entries are unchanged.
 //
 // Physical-size reasoning
 // -----------------------
 // At the 1280×720 fixed-resolution viewport on a typical landscape phone the
 // scale is ~1.0 dp per game unit. The primary button (radius 48 = diameter 96)
-// is comfortably above the 48dp interaction minimum. Smaller arc buttons
-// (radius 36–40) are still above 48dp diameter. See MovePadComponent for the
-// same reasoning.
+// is comfortably above the 48dp interaction minimum. Secondary buttons
+// (radius 40 = diameter 80) are also above 48dp.
 // ---------------------------------------------------------------------------
 
-// Primary button (SMASH/TOSS) radius — innermost of the fan.
+// Primary button (JUMP&SMASH / TOSS) radius.
 const double _kPrimaryRadius = 48;
-// Secondary button radii.
-const double _kJumpRadius = 40;
-const double _kClearRadius = 40;
-const double _kDropRadius = 36;
+// Secondary button radius (RALLY and DROP).
+const double _kSecondaryRadius = 40;
 
-// Arc spacing — distance from the corner anchor to each button centre.
-// PRIMARY sits closest to the corner; arc buttons fan outward.
-const double _kPrimaryOffset = 70; // distance from corner to primary centre
-const double _kArcOffset = 170; // distance from corner to arc button centres
-// (DROP uses the same _kArcOffset as JUMP and CLEAR; no separate constant needed.)
+// Gap between adjacent button edges in the tray.
+const double _kGap = 8;
+
+// Distance from the corner anchor to the primary button centre along the 45°
+// diagonal. This places the primary snugly in the corner.
+const double _kPrimaryOffset = 70;
 
 const double _kEdgeMargin = 12; // gap from viewport edge (before safe-area)
 const double _kOutlineWidth = 3;
-
-// Fan angles (measured from the corner — the fan opens toward the court
-// interior, i.e. upward and to the left from the bottom-right corner).
-// Angle 0 = straight up (negative y), angle 90° = straight left (negative x).
-// JUMP = 0° (straight up from corner), CLEAR = 90° (straight left).
-// DROP = 45° (diagonal between them).
-const double _kJumpAngle = 0; // straight up
-const double _kClearAngle = math.pi / 2; // straight left
-const double _kDropAngle = math.pi / 4; // 45° diagonal
 
 /// A single circular action button with the Head-Ball-style look.
 ///
@@ -100,7 +120,7 @@ class _ActionButton extends PositionComponent with TapCallbacks {
 
   static final TextPaint _textPaint = TextPaint(
     style: const TextStyle(
-      fontSize: 18,
+      fontSize: 16,
       color: GamePalette.buttonGlyph,
       fontWeight: FontWeight.bold,
     ),
@@ -114,7 +134,7 @@ class _ActionButton extends PositionComponent with TapCallbacks {
   /// Updates the button's label, action, and colour (used by the serve slot).
   ///
   /// [onHold] / [onRelease] / [chargeProvider] may be null to downgrade back
-  /// to one-shot semantics (e.g. when the slot flips from TOSS → SMASH).
+  /// to one-shot semantics (e.g. when the slot flips from TOSS → JUMP&SMASH).
   void reconfigure({
     required String label,
     required void Function() onPress,
@@ -211,26 +231,50 @@ class _ActionButton extends PositionComponent with TapCallbacks {
       );
     }
 
-    // 5. Label text.
-    _textPaint.render(
-      canvas,
-      _label,
-      Vector2(_radius, _radius),
-      anchor: Anchor.center,
-    );
+    // 5. Label text — supports multi-line via '\n' (rendered as two lines).
+    final lines = _label.split('\n');
+    if (lines.length == 1) {
+      _textPaint.render(
+        canvas,
+        _label,
+        Vector2(_radius, _radius),
+        anchor: Anchor.center,
+      );
+    } else {
+      // Two-line label: render each line offset by half a line height above/
+      // below centre. fontSize 16 → lineHeight ≈ 18.
+      const lineHeight = 9.0;
+      for (var i = 0; i < lines.length; i++) {
+        final offsetY =
+            _radius - lineHeight * (lines.length - 1) / 2 + i * lineHeight * 2;
+        _textPaint.render(
+          canvas,
+          lines[i],
+          Vector2(_radius, offsetY),
+          anchor: Anchor.center,
+        );
+      }
+    }
   }
 }
 
-/// Four action buttons (JUMP, SMASH/TOSS, DROP, CLEAR) anchored bottom-right
-/// in a quarter-circle fan layout.
+/// Three action buttons (JUMP&SMASH primary + RALLY + DROP) anchored
+/// bottom-right in a compact tray layout. During serving, only the TOSS
+/// button is shown.
 ///
-/// The PRIMARY button (SMASH/TOSS, radius 48) sits innermost at the
-/// bottom-right corner. JUMP (radius 40) is above it, CLEAR (radius 40) is
-/// to its left, and DROP (radius 36) sits diagonally between them at 45°.
+/// ## Rally layout
 ///
-/// The primary slot shows SMASH during normal play and switches to TOSS when
-/// `game.view.phase == MatchPhase.servePending` and
-/// `game.view.server == CourtSide.left` (the local player is always left).
+/// The PRIMARY button (radius 48) sits innermost at the corner. RALLY
+/// (radius 40) is to its left with a small gap. DROP (radius 40) is above it
+/// with a small gap. No button overlaps another; all are ≥ 48dp diameter.
+///
+/// ## Serve state
+///
+/// When `game.view.phase == MatchPhase.servePending && game.view.server ==
+/// CourtSide.left` (the local player is always left), RALLY and DROP are
+/// removed from the component tree. The primary slot reconfigures to TOSS with
+/// hold/release + charge-arc semantics. When the serve phase ends, RALLY and
+/// DROP are re-added and the primary reverts to JUMP&SMASH.
 ///
 /// [safeArea] is in game units; right + bottom insets offset the anchor.
 class ActionButtonsComponent extends Component
@@ -244,51 +288,69 @@ class ActionButtonsComponent extends Component
   /// Safe-area padding in game units.
   EdgeInsets safeArea;
 
-  // Buttons — fan layout from bottom-right corner.
-  late _ActionButton _jumpButton; // straight up from corner
-  late _ActionButton _primaryButton; // innermost (SMASH or TOSS)
-  late _ActionButton _dropButton; // 45° diagonal
-  late _ActionButton _clearButton; // straight left from corner
+  // Primary button — JUMP&SMASH during rally, TOSS while serving.
+  late _ActionButton _primaryButton;
+  // Secondary buttons — hidden while serving.
+  late _ActionButton _rallyButton; // RALLY (pressNormal), left of primary
+  late _ActionButton _dropButton; // DROP (pressDrop), above primary
 
   bool _loaded = false;
+
+  // Tracks the current serving state to detect flips (avoid add/remove every
+  // frame).
+  bool _serving = false;
+  // Tracks whether the secondary buttons are currently in the tree.
+  bool _secondariesMounted = false;
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
     _primaryButton = _ActionButton(
-      label: 'SMASH',
-      onPress: game.controls.pressSmash,
+      label: 'JUMP\nSMASH',
+      onPress: _onJumpSmashPress,
       color: GamePalette.buttonFace,
       position: _primaryPos(),
       radius: _kPrimaryRadius,
     );
-    _jumpButton = _ActionButton(
-      label: 'JUMP',
-      onPress: game.controls.pressJump,
-      color: GamePalette.buttonFace,
-      position: _arcPos(_kJumpAngle, _kJumpRadius),
-      radius: _kJumpRadius,
-    );
-    _clearButton = _ActionButton(
-      label: 'CLEAR',
+    _rallyButton = _ActionButton(
+      label: 'RALLY',
       onPress: game.controls.pressNormal,
       color: GamePalette.buttonFace,
-      position: _arcPos(_kClearAngle, _kClearRadius),
-      radius: _kClearRadius,
+      position: _rallyPos(),
+      radius: _kSecondaryRadius,
     );
     _dropButton = _ActionButton(
       label: 'DROP',
       onPress: game.controls.pressDrop,
       color: GamePalette.buttonFace,
-      position: _arcPos(_kDropAngle, _kDropRadius),
-      radius: _kDropRadius,
+      position: _dropPos(),
+      radius: _kSecondaryRadius,
     );
-    await addAll([_jumpButton, _primaryButton, _dropButton, _clearButton]);
+
+    // Determine initial serving state.
+    final view = game.view;
+    _serving =
+        view.phase == MatchPhase.servePending && view.server == CourtSide.left;
+
+    if (_serving) {
+      // Boot directly into serving mode: only primary (as TOSS).
+      _reconfigureAsToss();
+      await add(_primaryButton);
+      _secondariesMounted = false;
+    } else {
+      // Boot into rally mode: all three buttons.
+      await addAll([_primaryButton, _rallyButton, _dropButton]);
+      _secondariesMounted = true;
+    }
     _loaded = true;
   }
 
-  // Whether the primary slot is currently showing TOSS (tracked to detect flips).
-  bool _slotIsToss = false;
+  /// Called when the JUMP&SMASH primary button is tapped.
+  void _onJumpSmashPress() {
+    final view = game.view;
+    final airborne = view.leftPlayer.feetY < kGroundY;
+    game.controls.pressJumpSmash(airborne: airborne);
+  }
 
   @override
   void update(double dt) {
@@ -296,69 +358,105 @@ class ActionButtonsComponent extends Component
 
     // Re-position the cluster based on current safe area.
     _primaryButton.position = _primaryPos();
-    _jumpButton.position = _arcPos(_kJumpAngle, _kJumpRadius);
-    _clearButton.position = _arcPos(_kClearAngle, _kClearRadius);
-    _dropButton.position = _arcPos(_kDropAngle, _kDropRadius);
+    if (_secondariesMounted) {
+      _rallyButton.position = _rallyPos();
+      _dropButton.position = _dropPos();
+    }
 
-    // Context-sensitive slot: TOSS during servePending (left server), else SMASH.
+    // Detect serving-state flip.
     final view = game.view;
     final isServingLeft =
         view.phase == MatchPhase.servePending && view.server == CourtSide.left;
 
-    if (isServingLeft && !_slotIsToss) {
-      // Slot flipping TO toss — wire hold/release semantics + charge meter.
-      _slotIsToss = true;
-      _primaryButton.reconfigure(
-        label: 'TOSS',
-        onPress: () {}, // unused: onHold takes over
-        color: GamePalette.serveAccent,
-        onHold: () => game.controls.tossHeld = true,
-        onRelease: () => game.controls.tossHeld = false,
-        chargeProvider: () => game.view.serveCharge,
-      );
-    } else if (!isServingLeft && _slotIsToss) {
-      // Slot flipping AWAY from toss — clear any stale hold and downgrade to
-      // one-shot smash.
-      _slotIsToss = false;
+    if (isServingLeft && !_serving) {
+      // Flipping TO serving: remove secondaries, reconfigure primary as TOSS.
+      _serving = true;
+      if (_secondariesMounted) {
+        remove(_rallyButton);
+        remove(_dropButton);
+        _secondariesMounted = false;
+      }
+      _reconfigureAsToss();
+    } else if (!isServingLeft && _serving) {
+      // Flipping AWAY from serving: clear stale toss hold, revert primary to
+      // JUMP&SMASH, re-add secondaries.
+      _serving = false;
       game.controls.tossHeld = false;
-      _primaryButton.reconfigure(
-        label: 'SMASH',
-        onPress: game.controls.pressSmash,
-        color: GamePalette.buttonFace,
-      );
+      _reconfigureAsJumpSmash();
+      if (!_secondariesMounted) {
+        addAll([_rallyButton, _dropButton]);
+        _secondariesMounted = true;
+      }
     }
   }
 
-  /// Returns the top-left position of the PRIMARY button, anchored to the
-  /// bottom-right corner with safe-area insets.
+  void _reconfigureAsToss() {
+    _primaryButton.reconfigure(
+      label: 'TOSS',
+      onPress: () {}, // unused: onHold takes over
+      color: GamePalette.serveAccent,
+      onHold: () => game.controls.tossHeld = true,
+      onRelease: () => game.controls.tossHeld = false,
+      chargeProvider: () => game.view.serveCharge,
+    );
+  }
+
+  void _reconfigureAsJumpSmash() {
+    _primaryButton.reconfigure(
+      label: 'JUMP\nSMASH',
+      onPress: _onJumpSmashPress,
+      color: GamePalette.buttonFace,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Layout geometry
+  // ---------------------------------------------------------------------------
+
+  /// Returns the corner anchor point (bottom-right of the screen) after
+  /// applying edge margin and safe-area insets.
   ///
-  /// The primary button sits at _kPrimaryOffset distance from the corner anchor
-  /// along the 45° diagonal (innermost of the fan).
+  /// Anchored against the VIRTUAL resolution (kCourtWidth × kCourtHeight):
+  /// viewport children render in virtual coordinates, so anchoring against
+  /// `camera.viewport.size` (the device size) misplaces the cluster on any
+  /// display whose logical size differs from 1280×720 (e.g. desktop windows).
+  Vector2 _cornerAnchor() {
+    const x = kCourtWidth - _kEdgeMargin;
+    const y = kCourtHeight - _kEdgeMargin;
+    return Vector2(x - safeArea.right, y - safeArea.bottom);
+  }
+
+  /// Returns the top-left position of the PRIMARY button.
+  ///
+  /// The primary centre sits at [_kPrimaryOffset] from the corner along the
+  /// 45° diagonal (up-left).
   Vector2 _primaryPos() {
     final anchor = _cornerAnchor();
-    // Primary sits along the 45° diagonal from the corner.
-    const angle = math.pi / 4; // 45° (diagonal up-left from corner)
+    const angle = math.pi / 4; // 45° diagonal
     final cx = anchor.x - math.sin(angle) * _kPrimaryOffset;
     final cy = anchor.y - math.cos(angle) * _kPrimaryOffset;
     return Vector2(cx - _kPrimaryRadius, cy - _kPrimaryRadius);
   }
 
-  /// Returns the top-left position of an arc button at [angle] (from vertical,
-  /// 0 = up, π/2 = left) with the given [radius].
-  Vector2 _arcPos(double angle, double radius) {
-    final anchor = _cornerAnchor();
-    // Arc buttons fan at _kArcOffset from the corner anchor.
-    final cx = anchor.x - math.sin(angle) * _kArcOffset;
-    final cy = anchor.y - math.cos(angle) * _kArcOffset;
-    return Vector2(cx - radius, cy - radius);
+  /// Returns the top-left position of the RALLY button (directly left of
+  /// the primary, edge-to-edge gap of [_kGap]).
+  Vector2 _rallyPos() {
+    final pPos = _primaryPos();
+    // Directly left of the primary:
+    final x = pPos.x - _kGap - 2 * _kSecondaryRadius;
+    // Vertically centred on the primary:
+    final y = pPos.y + _kPrimaryRadius - _kSecondaryRadius;
+    return Vector2(x, y);
   }
 
-  /// Returns the bottom-right corner anchor (the point the fan radiates from),
-  /// in viewport coordinates, after applying edge margin and safe-area insets.
-  Vector2 _cornerAnchor() {
-    final viewportSize = game.camera.viewport.size;
-    final x = viewportSize.x - _kEdgeMargin - safeArea.right;
-    final y = viewportSize.y - _kEdgeMargin - safeArea.bottom;
+  /// Returns the top-left position of the DROP button (directly above the
+  /// primary, edge-to-edge gap of [_kGap]).
+  Vector2 _dropPos() {
+    final pPos = _primaryPos();
+    // Horizontally centred on the primary:
+    final x = pPos.x + _kPrimaryRadius - _kSecondaryRadius;
+    // Directly above the primary:
+    final y = pPos.y - _kGap - 2 * _kSecondaryRadius;
     return Vector2(x, y);
   }
 }

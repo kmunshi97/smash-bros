@@ -1,7 +1,7 @@
 import 'package:smash_bros/engine/input/input_action.dart';
 
 // ---------------------------------------------------------------------------
-// LocalControlState — M1-025 (updated M1-034)
+// LocalControlState — M1-025 (updated M1-034, M1-036 jump-smash)
 //
 // Bridge between the input widgets/keyboard and the simulation's InputBuffer.
 // Written to by UI components and the keyboard handler; drained once per
@@ -24,10 +24,26 @@ import 'package:smash_bros/engine/input/input_action.dart';
 //   drainTick() call. Holding the button does NOT repeat the bit; the player
 //   must release and press again to fire the action a second time.
 //
+// * DELAYED one-shots (pressJumpSmash grounded path): a single button press
+//   issues an immediate jump bit AND schedules a smash bit to fire exactly
+//   [kJumpSmashApexDelayTicks] drains later (the jump apex). drainTick()
+//   decrements the countdown each call and ORs in the smash bit when it
+//   reaches zero. A re-press while the countdown is active is silently ignored
+//   (the pending delayed smash is already on its way). If the player is
+//   already airborne when pressJumpSmash is called, the smash fires on the
+//   very next drain and no jump bit is set (same as pressSmash).
+//
 // The engine's InputValidator owns all game-rule sanitisation (stun gating,
 // shot deduplication, serve isolation). This class only shapes press semantics
 // — it does NOT enforce any game rules itself.
 // ---------------------------------------------------------------------------
+
+/// Ticks between a jump launch and the smash bit in a jump-smash combo.
+///
+/// Value 20 = the jump apex (half of `kPlayerJumpDuration` = 40 ticks).
+/// This is a feel-tuning constant; it will be promoted to BalanceConfig in
+/// M1-032b.
+const int kJumpSmashApexDelayTicks = 20;
 
 /// Mutable per-frame input accumulator for the local (human) player.
 ///
@@ -60,6 +76,16 @@ class LocalControlState {
   bool _pendingDrop = false;
   bool _pendingNormal = false;
 
+  // -- Delayed one-shot countdown (jump-smash) --------------------------------
+
+  /// Remaining drains before the delayed smash bit fires.
+  ///
+  /// -1 means no countdown is active. When [pressJumpSmash] is called with
+  /// `airborne: false`, this is set to [kJumpSmashApexDelayTicks]. Each
+  /// [drainTick] decrements it; when it reaches 0 the smash bit is included
+  /// and the countdown resets to -1.
+  int _jumpSmashCountdown = -1;
+
   // -- One-shot setters -------------------------------------------------------
 
   /// Schedules a jump for the next [drainTick] call.
@@ -78,6 +104,34 @@ class LocalControlState {
   /// Schedules a normal (clear/drive) shot for the next [drainTick] call.
   void pressNormal() => _pendingNormal = true;
 
+  // -- Combined jump-smash setter --------------------------------------------
+
+  /// Issues a jump-smash combo action.
+  ///
+  /// * [airborne] = `true` (player is mid-air): behaves identically to
+  ///   [pressSmash] — the smash bit fires on the very next [drainTick]. No
+  ///   jump bit is set because the player is already in the air.
+  ///
+  /// * [airborne] = `false` (player is grounded): sets the jump bit for the
+  ///   next [drainTick] AND starts a countdown of [kJumpSmashApexDelayTicks]
+  ///   drains. When the countdown expires the smash bit fires automatically,
+  ///   delivering the smash at the jump apex without any second button press.
+  ///
+  /// If called while a grounded countdown is already active, the new press is
+  /// silently ignored — the in-flight combo is preserved and does not stack or
+  /// reset.
+  void pressJumpSmash({required bool airborne}) {
+    if (airborne) {
+      // Player is already in the air: fire smash immediately.
+      _pendingSmash = true;
+    } else {
+      // Player is grounded: ignore if a countdown is already ticking.
+      if (_jumpSmashCountdown >= 0) return;
+      _pendingJump = true;
+      _jumpSmashCountdown = kJumpSmashApexDelayTicks;
+    }
+  }
+
   // -- Drain -----------------------------------------------------------------
 
   /// Builds the [InputAction] bitmask for one simulation tick and clears all
@@ -89,6 +143,8 @@ class LocalControlState {
   /// * Each pending one-shot bit is included exactly once — the flag is cleared
   ///   immediately, so subsequent ticks see `0` for that action until the
   ///   player presses the button again.
+  /// * The delayed jump-smash countdown is decremented each drain; the smash
+  ///   bit is ORed in on the tick the countdown reaches zero.
   ///
   /// Call this exactly once per simulation tick in the fixed-timestep driver's
   /// onTick callback, BEFORE calling `simulation.tick()`.
@@ -116,6 +172,14 @@ class LocalControlState {
     if (_pendingNormal) {
       bits |= InputAction.normalShot;
       _pendingNormal = false;
+    }
+
+    // Delayed jump-smash: decrement countdown; fire smash when it hits zero.
+    if (_jumpSmashCountdown > 0) {
+      _jumpSmashCountdown--;
+    } else if (_jumpSmashCountdown == 0) {
+      bits |= InputAction.smash;
+      _jumpSmashCountdown = -1;
     }
 
     return bits;

@@ -75,8 +75,11 @@ const int _kShotMixSmashMax = 90; // [70, 90) → smash
 ///    and the rally's hit-lockout is NOT this side, emits a shot drawn via the
 ///    private PRNG: 70 % normal, 20 % smash, 10 % drop. After emitting a swing,
 ///    holds off for `_kSwingCooldownTicks` ticks.
-///    BasicAI never emits `InputAction.jump` — jump smashes are IntermediateAI's
-///    domain (M2).
+///    A smash is always emitted as `jump | smash` (M1-036: jump and smash are
+///    one action game-wide). The tick order starts the jump (step 3) before
+///    the swing resolves (step 4), so the engine registers an airborne smash
+///    with the jump-smash bonus. Apex-timed smashes on predicted trajectories
+///    remain IntermediateAI's domain (M2).
 ///
 /// ### All other phases
 ///
@@ -277,11 +280,15 @@ final class BasicAI implements AIController {
     return side == CourtSide.left ? kPlayer1StartX : kPlayer2StartX;
   }
 
-  /// Chooses a shot InputAction bit from the 70/20/10 distribution.
+  /// Chooses shot InputAction bits from the 70/20/10 distribution.
+  ///
+  /// A smash draw returns `jump | smash` — jump and smash are a single action
+  /// (M1-036). The same-tick combination resolves as an airborne smash with
+  /// the jump-smash bonus (see the class docs for the tick-order argument).
   int _chooseShotBit() {
     final roll = _random.nextInt(100);
     if (roll < _kShotMixNormalMax) return InputAction.normalShot;
-    if (roll < _kShotMixSmashMax) return InputAction.smash;
+    if (roll < _kShotMixSmashMax) return InputAction.jump | InputAction.smash;
     return InputAction.dropShot;
   }
 

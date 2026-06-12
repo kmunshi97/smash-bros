@@ -1,5 +1,6 @@
 import 'package:flame/components.dart';
 import 'package:flutter/painting.dart';
+import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/rules/match_phase.dart';
 import 'package:smash_bros/game/badminton_game.dart';
@@ -80,9 +81,10 @@ class PhaseBannerComponent extends PositionComponent
         return;
     }
 
-    final viewportSize = game.camera.viewport.size;
-    final centreX = viewportSize.x / 2;
-    final centreY = viewportSize.y / 2;
+    // Centred in the VIRTUAL resolution — viewport children render in
+    // virtual coordinates, not device coordinates.
+    const centreX = kCourtWidth / 2;
+    const centreY = kCourtHeight / 2;
 
     // -- Semi-transparent backdrop --------------------------------------------
     // Use Flame's toTextPainter to measure the title string width so the

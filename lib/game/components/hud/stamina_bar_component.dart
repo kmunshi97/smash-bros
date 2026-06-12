@@ -51,12 +51,13 @@ class StaminaBarComponent extends PositionComponent
   @override
   void render(Canvas canvas) {
     final v = game.view;
-    final viewportSize = game.camera.viewport.size;
 
+    // Anchored against the VIRTUAL resolution (kCourtWidth) — viewport
+    // children render in virtual coordinates, not device coordinates.
     final topY = _kTopMargin + safeArea.top;
     final leftX = side == CourtSide.left
         ? _kEdgeMargin + safeArea.left
-        : viewportSize.x - _kEdgeMargin - safeArea.right - _kBarWidth;
+        : kCourtWidth - _kEdgeMargin - safeArea.right - _kBarWidth;
 
     const outerWidth = _kBarWidth;
     const outerHeight = _kBarHeight;

@@ -19,6 +19,8 @@ Future<BadmintonGame> buildGame({int seed = 7}) => initializeGame(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   // --------------------------------------------------------------------------
   // restartMatch
   // --------------------------------------------------------------------------

@@ -313,15 +313,19 @@ void main() {
   // --------------------------------------------------------------------------
   // AI never emits jump
   // --------------------------------------------------------------------------
-  group('BasicAI — no jump', () {
-    test('BasicAI never emits InputAction.jump', () {
+  group('BasicAI — jump-smash pairing (M1-036)', () {
+    test('jump is emitted if and only if smash is emitted', () {
+      // M1-036: jump and smash are a single action game-wide. BasicAI emits
+      // them on the same tick (the tick order makes the smash airborne with
+      // the jump-smash bonus); it never jumps for any other reason.
       final sim = Simulation(seed: 77)..start();
       final leftAi = BasicAI(side: CourtSide.left, seed: 1);
       final rightAi = BasicAI(side: CourtSide.right, seed: 2);
 
+      var smashesSeen = 0;
       for (
         var i = 0;
-        i < 1000 && sim.state.fsm.phase != MatchPhase.matchOver;
+        i < 3000 && sim.state.fsm.phase != MatchPhase.matchOver;
         i++
       ) {
         final f = sim.state.frame;
@@ -331,17 +335,27 @@ void main() {
         sim.state.rightInputs.set(f, rightBit);
         sim.tick();
 
-        expect(
-          InputAction.has(leftBit, InputAction.jump),
-          isFalse,
-          reason: 'Left BasicAI should never emit jump',
-        );
-        expect(
-          InputAction.has(rightBit, InputAction.jump),
-          isFalse,
-          reason: 'Right BasicAI should never emit jump',
-        );
+        for (final bits in [leftBit, rightBit]) {
+          final hasJump = InputAction.has(bits, InputAction.jump);
+          final hasSmash = InputAction.has(bits, InputAction.smash);
+          if (hasSmash) smashesSeen++;
+          expect(
+            hasJump,
+            hasSmash,
+            reason:
+                'BasicAI must emit jump exactly when it emits smash '
+                '(jump-smash is one action); got bits=$bits at frame $f',
+          );
+        }
       }
+
+      // Sanity: the match must have produced at least one smash, otherwise
+      // the iff assertion above never exercised the interesting case.
+      expect(
+        smashesSeen,
+        greaterThan(0),
+        reason: 'expected at least one smash over the sampled frames',
+      );
     });
   });
 
