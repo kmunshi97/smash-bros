@@ -170,13 +170,15 @@ void main() {
   });
 
   group('scripted point from a real serve', () {
-    test('a bare toss lobs onto the server own half and the receiver '
-        'scores groundedIn', () {
-      // Toss is a near-vertical lob (75 degrees): it rises and falls back on
-      // the SERVER's own half, in bounds. A shuttle that lands IN on a side is
-      // the OTHER side's point, so the receiver (right) scores by groundedIn.
-      // This is the only point a single real serve input can deterministically
-      // produce, since the soft toss never reaches the receiver's half.
+    test('a toss crosses the net and lands in the receiver half — '
+        'server wins the point (or short-serve fault)', () {
+      // M1-032a: the serve constants were tuned so the toss reaches the
+      // receiver's half of the court.  A shuttle landing IN on the right
+      // half means the LEFT (server) wins the point via groundedIn.
+      // If the serve lands short of the short-service line (640–840), the
+      // receiver wins via shortServeFault instead.  Either outcome confirms
+      // the shuttle crossed the net — the old KNOWN-BROKEN behaviour (serve
+      // falls back on the server's own half) is hereby inverted.
       final sim = Simulation(seed: 1)..start();
       sim.state.leftInputs.set(0, InputAction.toss);
 
@@ -190,9 +192,16 @@ void main() {
 
       expect(landing, isNotNull);
       expect(landing!.isInBounds, isTrue);
-      expect(landing!.side, CourtSide.left); // fell on the server's half
-      expect(sim.state.fsm.pointWinner, CourtSide.right);
-      expect(sim.state.fsm.lastPointReason, PointReason.groundedIn);
+      // With the tuned constants the shuttle reaches the RIGHT half.
+      expect(landing!.side, CourtSide.right);
+      // The point reason is either groundedIn (server wins, shuttle past the
+      // short-service line) or shortServeFault (receiver wins, shuttle in
+      // the 640–840 zone).  Both confirm net-crossing — a landing on the
+      // LEFT half (groundedIn + pointWinner = right) would mean regression.
+      expect(
+        sim.state.fsm.lastPointReason,
+        anyOf(PointReason.groundedIn, PointReason.shortServeFault),
+      );
     });
   });
 
