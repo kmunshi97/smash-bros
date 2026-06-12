@@ -99,31 +99,34 @@ const double kJumpSmashBonus = 1.15;
 
 /// Per-tick downward gravity applied to the shuttle (+y).
 ///
-/// Tuned (M1-032a) from 0.15 to 0.06 so that shots launched from the ground
-/// level (y ≈ 520) can rise above the net top (y = 350) in the horizontal
-/// distance to the net.  With the original value of 0.15 the gravitational
-/// pull was so strong that no realistic launch speed/angle combination could
-/// arc a shuttle over the net from the serve or rally start positions.
-const double kShuttleGravity = 0.06;
+/// Tuned (M1-032a) from 0.15 → 0.06 to make shots physically reachable.
+/// Retuned (M1-032a retune) from 0.06 → 0.14 to eliminate floatiness.
+/// At 0.06 every shot took 3+ seconds in the air (177–198 ticks for a normal
+/// clear), feeling like slow motion for an arcade title.  At 0.14 flight times
+/// drop to 114–128 ticks for normals (1.9–2.1 s) and 117 ticks for serves
+/// (≈ 2.0 s), which is snappy but still followable on screen.
+/// Higher launch speeds compensate so every shot still crosses the net.
+const double kShuttleGravity = 0.14;
 
 /// Quadratic-drag coefficient for normal flight.
 ///
-/// Tuned (M1-032a) from 0.003 to 0.001.  At the original coefficient the
-/// drag bled horizontal speed so fast that even the maximum-velocity shuttle
-/// stalled before reaching the far side of the court.  At 0.001 a normal
-/// shot from the defensive position (300, 520) clears the net and lands well
-/// inside the baseline — see test/engine/balance/.
+/// Unchanged at 0.001 through both tuning passes (M1-032a and retune).  The
+/// value is low enough that high-speed shots (clears, smashes) retain their
+/// range and cross to the opponent half without stalling, while gravity at
+/// 0.14 provides the primary landing-speed control.
 const double kShuttleDragCoefficient = 0.001;
 
 /// Quadratic-drag coefficient for drop shots (higher, bleeds speed faster).
 ///
-/// Tuned (M1-032a) from 0.006 to 0.002.  The drop shot uses a steep launch
-/// angle (kDropShotAngle) to clear the net; the elevated drag then bleeds
-/// residual speed, keeping the landing between the net and the short-service
-/// line (640–840) — see test/engine/balance/.  Using the same coefficient as
-/// normal flight would make drops fly as far as clears, removing their
-/// tactical identity.
-const double kShuttleDropShotDrag = 0.002;
+/// Retuned (M1-032a retune) from 0.002 → 0.001 (same as normal flight).
+/// At the new gravity (0.14) and steeper drop angle (65°) the shuttle already
+/// lands short — between the net and the short-service line (640–840) — using
+/// the same drag as a normal shot.  The higher angle is now the primary
+/// differentiator of the drop shot's short-range character; a separate drag
+/// coefficient is no longer needed and would overly dampen the shot under the
+/// stronger gravity.  See empirical result: drop from (450, 520) at 65°/9
+/// units/tick lands at x ≈ 778 — inside the 840 short-service line.
+const double kShuttleDropShotDrag = 0.001;
 
 /// Maximum shuttle speed in game units per tick (stability safeguard).
 ///
@@ -143,91 +146,91 @@ const double kNetCordDamping = 0.5;
 
 /// Launch speed of a normal clear/drive shot.
 ///
-/// Unchanged at 8 game-units/tick.  With the new gravity (0.06) and drag
-/// (0.001) this speed, combined with the updated angle range, produces
-/// trajectories that clear the net from a defensive position (300, 520) and
-/// land inside the baseline — see test/engine/balance/.
-const double kNormalShotSpeed = 8;
+/// Retuned (M1-032a retune) from 8 → 12 game-units/tick.  At the new
+/// gravity (0.14), the original speed of 8 produced net-crossing y values of
+/// ~475–515 — hitting the net body.  Speed 12 at the 45°–55° angle range
+/// produces net-crossing y values of 286–338, well above the net top (350),
+/// and lands 875–938 from the defensive position (300, 520) in ≤ 128 ticks.
+const double kNormalShotSpeed = 12;
 
 /// Minimum launch angle of a normal shot, in radians.
 ///
-/// Tuned (M1-032a) from 35° to 45°.  The angle range was shifted upward to
-/// keep near-net shots (launched from x ≈ 560) from sailing out of bounds
-/// under the new lower-gravity/lower-drag physics.  Steeper = shorter range.
-/// **Trade-off**: all normal shots arc higher than before, but every shot from
-/// any position in the left half clears the net and lands in bounds — the
-/// near-net constraint wins over flatness; see the dartdoc in
-/// test/engine/balance/shot_balance_test.dart for the full explanation.
+/// Unchanged at 45° through the retune (M1-032a retune).  At 45° with
+/// speed 12 and gravity 0.14, a defensive shot from (300, 520) crosses the
+/// net at y ≈ 338 (above the 350 net top) and lands at x ≈ 938 in 114 ticks.
+/// See test/engine/balance/ for the near-net scenario note.
 const double kNormalShotAngleMin = 45 * (pi / 180);
 
 /// Maximum launch angle of a normal shot, in radians.
 ///
-/// Tuned (M1-032a) from 45° to 55°.  At this angle a shot from the
-/// defensive position (300, 520) reaches the opponent half at x ≈ 889, and
-/// a shot from the near-net position (560, 520) lands at x ≈ 1149 — both
-/// within the court boundary of 1240 — see test/engine/balance/.
+/// Unchanged at 55° through the retune (M1-032a retune).  At 55° with
+/// speed 12 and gravity 0.14, a defensive shot from (300, 520) crosses the
+/// net at y ≈ 286 and lands at x ≈ 875 in 128 ticks — within bounds and
+/// well below the ≤ 135 tick flight-time target.
 const double kNormalShotAngleMax = 55 * (pi / 180);
 
 /// Launch speed of a smash.
 ///
 /// Unchanged at 16 game-units/tick.  The jump-smash bonus (16 × 1.15 = 18.4)
-/// stays within kShuttleMaxVelocity (20).  At the tuned gravity and drag the
-/// smash lands in the opponent half across the full angle range — see
-/// test/engine/balance/.
+/// stays within kShuttleMaxVelocity (20).
 const double kSmashSpeed = 16;
 
 /// Minimum launch angle of a smash, in radians.
 ///
-/// Unchanged at 10°.  At this shallow angle the smash still crosses the net
-/// and lands well in bounds at the tuned constants.
+/// Unchanged at 10°.  From the corrected jump-contact position (450, 290)
+/// at gravity 0.14, the smash at 10° crosses the net at y ≈ 336 (above the
+/// net top at 350) and lands at x ≈ 1089 — in bounds and in opponent half.
 const double kSmashAngleMin = 10 * (pi / 180);
 
 /// Maximum launch angle of a smash, in radians.
 ///
-/// Tuned (M1-032a) from 20° to 25°.  The steeper maximum allows a wider
-/// tactical spread while still landing past the net (x > 640) — at 25° the
-/// shuttle lands at x ≈ 686, just past the net — see test/engine/balance/.
-const double kSmashAngleMax = 25 * (pi / 180);
+/// Retuned (M1-032a retune) from 25° → 13°.  The previous test scenario
+/// launched from (450, 480) — 130 units below the net top — which was
+/// physically incoherent for a jump smash; a real jump-smash contact is at
+/// racquet height ≈ y 260–290.  With the corrected launch position (450, 290)
+/// and gravity 0.14, the maximum angle at which the shuttle still clears the
+/// net (crossing y < 350) is 13°; at 14° the crossing y = 350.4 hits the
+/// tape.  The tighter range [10°, 13°] matches the narrow downward window of
+/// a genuine hard smash and makes smash direction more predictable/readable
+/// for players — wide angle spreads are the province of drops and clears.
+const double kSmashAngleMax = 13 * (pi / 180);
 
 /// Launch speed of a drop shot.
 ///
-/// Tuned (M1-032a) from 5 to 7 game-units/tick.  The steeper launch angle
-/// (kDropShotAngle) requires enough initial velocity to carry the shuttle
-/// over the net; at speed 7 the drop clears the net (netCrossingY ≈ 337,
-/// which is above the net top at 350) and lands short at x ≈ 794 — between
-/// the net and the short-service line at 840 — see test/engine/balance/.
-const double kDropShotSpeed = 7;
+/// Retuned (M1-032a retune) from 7 → 9 game-units/tick.  At gravity 0.14
+/// the original speed of 7 at 65° produced a net crossing y ≈ 479 — below
+/// the net body.  Speed 9 at 65° produces crossing y ≈ 342 (above the
+/// 350 net top) and lands at x ≈ 778, inside the short-service line at 840,
+/// in 115 ticks (≤ the 120-tick flight-time target).
+const double kDropShotSpeed = 9;
 
 /// Launch angle of a drop shot, in radians.
 ///
-/// Tuned (M1-032a) from 25° to 60°.  With the original 25° angle the shuttle
-/// launched from y = 520 could never reach the net top at y = 350 — the
-/// geometry requires an angle above ≈ 42° just to clear the height difference
-/// without any physics forces.  At 60° the shuttle arcs high, clearing the
-/// net cleanly, then the elevated drag (kShuttleDropShotDrag) kills the
-/// horizontal speed and the shuttle drops short — see test/engine/balance/.
-const double kDropShotAngle = 60 * (pi / 180);
+/// Retuned (M1-032a retune) from 60° → 65°.  At gravity 0.14 and speed 9,
+/// 65° provides the minimum vertical impulse needed to arc the shuttle over
+/// the net (from y = 520 to net top y = 350, a 170-unit rise over 190 units
+/// of horizontal distance).  The steeper angle keeps the landing short while
+/// the unified drag coefficient (kShuttleDropShotDrag = 0.001) is sufficient
+/// — no separate elevated drag is required under the stronger gravity.
+const double kDropShotAngle = 65 * (pi / 180);
 
 /// Launch speed of a serve toss.
 ///
-/// Tuned (M1-032a) from 4 to 9 game-units/tick.  The original value of 4
-/// produced a near-vertical lob that travelled only ≈ 60 horizontal units —
-/// a serve that could never reach the net at x = 640, let alone the
-/// short-service line at x = 840.  At speed 9 with the tuned gravity (0.06)
-/// and drag (0.001) the serve clears the net at y ≈ 299 and lands at
-/// x ≈ 941 — past the short-service line and inside the baseline — see
-/// test/engine/balance/.
-const double kTossSpeed = 9;
+/// Retuned (M1-032a retune) from 9 → 13 game-units/tick.  At gravity 0.14
+/// the original speed of 9 at 45° produced a net crossing y ≈ 577 — hitting
+/// the net body.  Speed 13 at 43° crosses the net at y ≈ 338 (above the 340
+/// threshold, well above the 350 net top) and lands at x ≈ 904, past the
+/// short-service line (840) and inside the baseline (1240), in 117 ticks
+/// (≤ the 135-tick flight-time target).
+const double kTossSpeed = 13;
 
 /// Launch angle of a serve toss, in radians.
 ///
-/// Tuned (M1-032a) from 75° to 45°.  The original 75° was a near-vertical
-/// lob that maximised height but sacrificed all horizontal range.  45°
-/// balances height (the shuttle arcs above the net top) with range (the
-/// shuttle reaches the receiver's half).  The toss has no PRNG spread
-/// (fixed angle), so a single trajectory determines compliance; see
-/// test/engine/balance/.
-const double kTossAngle = 45 * (pi / 180);
+/// Retuned (M1-032a retune) from 45° → 43°.  Slightly shallower than 45°
+/// increases horizontal range while gravity 0.14 keeps the arc tight enough
+/// to clear the net above the 340 clearance threshold.  The toss has no PRNG
+/// spread (fixed angle), so a single trajectory determines compliance.
+const double kTossAngle = 43 * (pi / 180);
 
 // ---------------------------------------------------------------------------
 // Timing (in frames at 60 fps)

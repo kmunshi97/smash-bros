@@ -43,16 +43,31 @@ void main() {
       );
     });
 
-    test('the drop-shot coefficient slows the shuttle more', () {
-      final normal = _shuttle(velocity: const FixVec2(Fix.of(10), Fix.zero));
-      final drop = _shuttle(velocity: const FixVec2(Fix.of(10), Fix.zero));
-      normal.integrate(dragCoefficient: _drag);
-      drop.integrate(dragCoefficient: _dropDrag);
-      expect(
-        drop.velocity.magnitude.toDouble(),
-        lessThan(normal.velocity.magnitude.toDouble()),
-      );
-    });
+    test(
+      'drop-shot drag coefficient is accepted and reduces speed '
+      '(post-retune: kShuttleDropShotDrag == kShuttleDragCoefficient; '
+      'both equal 0.001 — drop range is now governed by angle + gravity, '
+      'not elevated drag; this test verifies the coefficient is applied)',
+      () {
+        // Both constants are 0.001 after M1-032a retune.  Verify that any
+        // non-zero drag coefficient reduces the shuttle's magnitude versus
+        // the no-drag baseline — the integration path is the same regardless
+        // of whether the drop and normal coefficients happen to be equal.
+        final withDrag = _shuttle(
+          velocity: const FixVec2(Fix.of(10), Fix.zero),
+        );
+        final noDrag = _shuttle(velocity: const FixVec2(Fix.of(10), Fix.zero));
+        withDrag.integrate(dragCoefficient: _dropDrag);
+        noDrag.integrate(dragCoefficient: Fix.zero);
+        expect(
+          withDrag.velocity.magnitude.toDouble(),
+          lessThan(noDrag.velocity.magnitude.toDouble()),
+          reason:
+              'A non-zero kShuttleDropShotDrag must still reduce the shuttle '
+              'speed vs no drag; coefficient = $kShuttleDropShotDrag.',
+        );
+      },
+    );
 
     test('the zero-velocity case is safe (no NaN from normalisation)', () {
       final s = _shuttle()..integrate(dragCoefficient: _drag);

@@ -16,6 +16,7 @@ final class TrajectoryResult {
     required this.landingX,
     required this.crossedNet,
     required this.netCrossingY,
+    required this.flightTicks,
   });
 
   /// The x coordinate at which the shuttle reached the ground plane
@@ -32,12 +33,21 @@ final class TrajectoryResult {
   /// otherwise.
   final double netCrossingY;
 
+  /// Number of simulation ticks from launch until the shuttle reached
+  /// [kGroundY].
+  ///
+  /// Used by the snappy-feel flight-time assertions: at 60 Hz, 135 ticks
+  /// equals 2.25 s, which is the target ceiling for serves and normal clears;
+  /// 120 ticks (2.0 s) is the ceiling for drop shots.
+  final int flightTicks;
+
   @override
   String toString() =>
       'TrajectoryResult('
       'landingX=${landingX.toStringAsFixed(1)}, '
       'crossedNet=$crossedNet, '
-      'netCrossingY=${crossedNet ? netCrossingY.toStringAsFixed(1) : 'n/a'})';
+      'netCrossingY=${crossedNet ? netCrossingY.toStringAsFixed(1) : 'n/a'}, '
+      'flightTicks=$flightTicks)';
 }
 
 /// A pure-Dart trajectory harness that drives [Shuttle.integrate] until the
@@ -156,6 +166,7 @@ abstract final class TrajectoryHarness {
           landingX: landingX,
           crossedNet: crossedNet,
           netCrossingY: crossedNet ? netCrossingY : double.nan,
+          flightTicks: tick + 1,
         );
       }
     }
@@ -167,6 +178,7 @@ abstract final class TrajectoryHarness {
       landingX: shuttle.position.x.toDouble(),
       crossedNet: crossedNet,
       netCrossingY: crossedNet ? netCrossingY : double.nan,
+      flightTicks: maxTicks,
     );
   }
 }
