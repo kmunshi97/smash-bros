@@ -6,6 +6,8 @@ import 'package:flame/input.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' hide Simulation;
+import 'package:smash_bros/engine/ai/ai_controller.dart';
+import 'package:smash_bros/engine/ai/basic_ai.dart';
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
@@ -14,7 +16,7 @@ import 'package:smash_bros/engine/sim/simulation.dart';
 import 'package:smash_bros/game/components/components.dart';
 import 'package:smash_bros/game/input/local_control_state.dart';
 
-/// The Flame game host for Arcade Badminton (M1-020, extended in M1-025).
+/// The Flame game host for Arcade Badminton (M1-020, extended in M1-025/029).
 ///
 /// ## ADR-7 — Fixed-timestep render loop
 ///
@@ -52,29 +54,55 @@ import 'package:smash_bros/game/input/local_control_state.dart';
 class BadmintonGame extends FlameGame with KeyboardEvents {
   /// Creates a game with a deterministic [seed], the given [firstServer], and
   /// a match played to [targetScore].
+  ///
+  /// Pass [rightAi] to wire an [AIController] as the right player's input
+  /// source. If omitted, the right player receives no input (useful for
+  /// two-human or testing scenarios).
   BadmintonGame({
     required int seed,
     CourtSide firstServer = CourtSide.left,
     int targetScore = kDefaultTargetScore,
+    AIController? rightAi,
   }) : _simulation = Simulation(
          seed: seed,
          firstServer: firstServer,
          targetScore: targetScore,
        ),
+       _firstServer = firstServer,
+       _targetScore = targetScore,
+       _rightAi = rightAi,
        super(
          camera: CameraComponent.withFixedResolution(
            width: kCourtWidth,
            height: kCourtHeight,
          ),
        ) {
+    _initDriver();
+  }
+
+  Simulation _simulation;
+  AIController? _rightAi;
+
+  // Stored so restartMatch can recreate the simulation with the same settings.
+  final CourtSide _firstServer;
+  final int _targetScore;
+
+  late FixedTimestepDriver _driver;
+
+  void _initDriver() {
     _driver = FixedTimestepDriver(
       onTick: () {
-        // Write the local player's input for the current frame BEFORE ticking.
-        // Drain exactly once per simulation tick (not per render frame).
-        _simulation.state.leftInputs.set(
-          _simulation.state.frame,
-          controls.drainTick(),
-        );
+        final frame = _simulation.state.frame;
+        // Write the local (left) player's input BEFORE ticking.
+        _simulation.state.leftInputs.set(frame, controls.drainTick());
+        // Write the AI's input BEFORE ticking (M1-029).
+        final ai = _rightAi;
+        if (ai != null) {
+          _simulation.state.rightInputs.set(
+            frame,
+            ai.decide(_simulation.state),
+          );
+        }
         _simulation.tick();
         _previous = _current;
         _current = RenderState.capture(_simulation);
@@ -82,9 +110,6 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       },
     );
   }
-
-  final Simulation _simulation;
-  late final FixedTimestepDriver _driver;
 
   /// The mutable input accumulator for the local (left) player.
   ///
@@ -176,6 +201,11 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     await camera.viewport.add(_staminaLeft);
     await camera.viewport.add(_staminaRight);
     await camera.viewport.add(_phaseBanner);
+
+    // -- Tap-to-restart overlay (M1-029) — added last so it has the highest
+    // priority and does not block normal HUD components while in play. During
+    // active play containsLocalPoint returns false, so it is tap-transparent.
+    await camera.viewport.add(RestartOverlayComponent());
   }
 
   @override
@@ -228,6 +258,31 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     final copy = List<RenderEvent>.unmodifiable(_pendingEvents);
     _pendingEvents.clear();
     return copy;
+  }
+
+  /// Restarts the match with fresh seeds, resetting the simulation and AI.
+  ///
+  /// Replaces [_simulation] with a new one using [seed], recreates the AI
+  /// with [aiSeed], resets the driver accumulator (so no burst of catch-up
+  /// ticks on the first frame), and recaptures both render snapshots from
+  /// the new initial state.
+  ///
+  /// Seeds are derived in the game layer from wall-clock time, which is
+  /// explicitly allowed outside `lib/engine/` (see CLAUDE.md). The engine
+  /// itself never sees wall-clock time — it only receives the seeded ints.
+  void restartMatch({required int seed, required int aiSeed}) {
+    _simulation = Simulation(
+      seed: seed,
+      firstServer: _firstServer,
+      targetScore: _targetScore,
+    );
+    _simulation.start();
+    _rightAi = BasicAI(side: CourtSide.right, seed: aiSeed);
+    _driver.reset();
+    _current = RenderState.capture(_simulation);
+    _previous = _current;
+    _view = RenderState.lerp(_previous, _current, _driver.alpha);
+    _pendingEvents.clear();
   }
 
   // -- Keyboard input (macOS desktop feel-tuning target) ---------------------

@@ -1,6 +1,8 @@
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:smash_bros/engine/ai/basic_ai.dart';
+import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/ui/theme/theme.dart';
 
@@ -67,9 +69,15 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
-    // Wall-clock seed: fine here — this is the presentation layer, outside the
+    // Wall-clock seeds: fine here — this is the presentation layer, outside the
     // engine. The engine never calls dart:math directly (see CLAUDE.md).
-    _game = BadmintonGame(seed: DateTime.now().millisecondsSinceEpoch);
+    // Both seeds are derived from the same millisecond base; XOR offset ensures
+    // they differ so the AI PRNG stream is independent of the match PRNG stream.
+    final base = DateTime.now().millisecondsSinceEpoch;
+    _game = BadmintonGame(
+      seed: base,
+      rightAi: BasicAI(side: CourtSide.right, seed: base ^ 0xDEADBEEF),
+    );
   }
 
   @override

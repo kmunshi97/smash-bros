@@ -71,7 +71,7 @@ class PhaseBannerComponent extends PositionComponent
         // tickPointPause: if (gameWinner != null) _transition(matchOver).
         final side = v.pointWinner == CourtSide.left ? 'LEFT' : 'RIGHT';
         title = 'MATCH OVER — $side WINS';
-        subline = null;
+        subline = 'TAP TO RESTART';
 
       case MatchPhase.preMatch:
       case MatchPhase.servePending:
