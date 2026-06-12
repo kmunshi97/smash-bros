@@ -1,11 +1,11 @@
 import 'package:flutter/painting.dart';
 
 // ---------------------------------------------------------------------------
-// Game render palette (M1-022..024, reskinned M1-027)
+// Game render palette (M1-022..024, reskinned M1-027, stadium restyle)
 //
 // Single source-of-truth for every colour used by the Flame components.
-// Stadium/cartoon look inspired by Head Ball 2: sky blue arena, green pitch,
-// orange-gold buttons, dark scoreboard with LED-green digits.
+// Stadium/cartoon look inspired by Head Ball 2: bright daylight arena,
+// saturated greens, cream ad wall, grey roof fascia.
 //
 // Components must read colours exclusively from this class. Do NOT inline
 // colour literals in component render methods — feel-tuning is a one-file
@@ -23,26 +23,44 @@ import 'package:flutter/painting.dart';
 abstract final class GamePalette {
   // -- Sky / Background -------------------------------------------------------
 
-  /// Sky top colour — deep azure blue at the top of the gradient.
-  static const Color skyTop = Color(0xFF1A6FBF);
+  /// Sky top colour — bright daylight sky blue at the very top.
+  static const Color skyTop = Color(0xFF87CEEB);
 
-  /// Sky bottom colour — lighter cornflower blue at the arena horizon.
-  static const Color skyBottom = Color(0xFF5BB8F5);
+  /// Sky bottom colour — lighter sky blue near the roof fascia.
+  static const Color skyBottom = Color(0xFFB8E4F9);
 
   /// Deep-space background fill (kept for compatibility with the phase banner
   /// component's backdrop); matches the dark arena tone.
   static const Color background = Color(0xFF0D2B45);
 
+  // -- Roof -------------------------------------------------------------------
+
+  /// Roof fascia band — light grey/white front face of the stadium roof.
+  static const Color roofFascia = Color(0xFFE8E8EC);
+
+  /// Roof underside shadow — darker grey suggesting depth below the fascia.
+  static const Color roofUndersideShadow = Color(0xFFB0B0BA);
+
   // -- Grandstand & Crowd -----------------------------------------------------
 
   /// Upper grandstand tier fill — medium stadium grey.
-  static const Color standUpperFill = Color(0xFF8C8C9A);
+  static const Color standUpperFill = Color(0xFF9E9EAA);
 
   /// Lower grandstand tier fill — slightly warmer grey.
-  static const Color standLowerFill = Color(0xFF7A7A87);
+  static const Color standLowerFill = Color(0xFF888896);
 
   /// Grandstand structural divider — dark border between tiers.
   static const Color standDivider = Color(0xFF4A4A55);
+
+  /// Corner wedge section fill — slightly darker diagonal stand sections at
+  /// the left and right edges, suggesting the bowl curving toward the viewer.
+  static const Color standCornerWedge = Color(0xFF6E6E7A);
+
+  /// Seat block highlight — alternating red seat banks behind crowd dots.
+  static const Color seatBlockRed = Color(0xFFB71C1C);
+
+  /// Seat block highlight — alternating blue seat banks behind crowd dots.
+  static const Color seatBlockBlue = Color(0xFF1565C0);
 
   /// A varied set of crowd shirt colours drawn from an RNG-seeded list.
   ///
@@ -59,47 +77,33 @@ abstract final class GamePalette {
     Color(0xFFFFFFFF), // white
   ];
 
-  // -- Floodlights ------------------------------------------------------------
+  // -- Advertising wall -------------------------------------------------------
 
-  /// Dark panel behind floodlight banks.
-  static const Color floodlightPanel = Color(0xFF2B2B35);
+  /// Cream/white base of the perimeter ad wall.
+  static const Color adStripBase = Color(0xFFF5F5E8);
 
-  /// Individual floodlight bulb circles — light grey suggesting bright lamps.
-  static const Color floodlightBulb = Color(0xFFCCCCD8);
+  /// Alternate ad wall panel — slightly darker cream for tiling effect.
+  static const Color adStripAlt = Color(0xFFE8E8D4);
 
-  // -- Advertising strip ------------------------------------------------------
+  /// Dark navy ad text colour — block-letter ad copy on the wall.
+  static const Color adTextColor = Color(0xFF1A237E);
 
-  /// Light base tone for the advertising hoarding strip.
-  static const Color adStripBase = Color(0xFFEEEECC);
-
-  /// Alternate ad board tile — slightly darker cream.
-  static const Color adStripAlt = Color(0xFFD4D4AA);
+  /// Thin shadow line at the base of the ad wall where it meets the grass.
+  static const Color adWallBaseShadow = Color(0xFF2E3A1E);
 
   // -- Pitch & Court floor ----------------------------------------------------
 
-  /// Base pitch green — the primary ground-band colour.
-  static const Color pitchBase = Color(0xFF2E7D32);
+  /// Base pitch green — the primary mow-band colour (bright daylight green).
+  static const Color pitchBase = Color(0xFF4CAF50);
 
-  /// Alternate mowing stripe — slightly lighter to suggest mown grass stripes.
-  static const Color pitchStripe = Color(0xFF388E3C);
-
-  /// Arena / play-space tone above the pitch — dark teal, keeps the air
-  /// readable against the shuttle and players.
-  static const Color arenaField = Color(0xFF0D3A5C);
+  /// Alternate mowing stripe — slightly lighter bright green.
+  static const Color pitchStripe = Color(0xFF66BB6A);
 
   /// Court floor colour — kept as alias to [pitchBase] for compatibility.
   static const Color courtFloor = pitchBase;
 
   /// White court-boundary and service-line markings.
   static const Color courtLines = Color(0xFFFFFFFF);
-
-  // -- Dirt apron (controls zone) ---------------------------------------------
-
-  /// Warm brown base of the dirt apron below the pitch where controls sit.
-  static const Color dirtApronBase = Color(0xFF8D6E63);
-
-  /// Slightly darker dirt apron shadow at the very bottom.
-  static const Color dirtApronDark = Color(0xFF6D4C41);
 
   // -- Net --------------------------------------------------------------------
 
@@ -158,6 +162,10 @@ abstract final class GamePalette {
 
   /// Shuttle fill colour — pure white so the cork reads clearly.
   static const Color shuttle = Color(0xFFFFFFFF);
+
+  /// Shuttle outline stroke — dark grey outline so the white shuttle remains
+  /// readable against the light cream ad wall and pale grandstand backdrop.
+  static const Color shuttleOutline = Color(0xFF444444);
 
   /// Trail segment base colour — white with reduced alpha.
   static const Color shuttleTrail = Color(0x66FFFFFF);

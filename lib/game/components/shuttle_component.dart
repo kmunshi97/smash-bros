@@ -44,6 +44,14 @@ class ShuttleComponent extends Component with HasGameReference<BadmintonGame> {
   // Pre-built paints.
   static final _shuttlePaint = Paint()..color = GamePalette.shuttle;
 
+  /// Outline stroke paint — dark grey ring drawn around the shuttle body so
+  /// the white shuttle stays readable against the light cream ad wall and
+  /// pale grandstand backdrop of the daylight stadium.
+  static final _shuttleOutlinePaint = Paint()
+    ..color = GamePalette.shuttleOutline
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.8;
+
   /// Current shuttle position in game-unit world space.
   Vector2 get position => _position;
   Vector2 _position = Vector2.zero();
@@ -119,11 +127,20 @@ class ShuttleComponent extends Component with HasGameReference<BadmintonGame> {
       );
     }
 
-    // 2. Shuttle circle — drawn last so it sits on top of the trail.
-    canvas.drawCircle(
-      Offset(_position.x, _position.y),
-      kShuttleRadius,
-      _shuttlePaint,
-    );
+    // 2. Shuttle fill + outline — drawn in a single cascade so the fill
+    //    sits under the outline stroke.  The outline is a thin dark ring
+    //    for readability against the new light daylight stadium backdrop
+    //    (cream ad wall, pale grandstand).
+    canvas
+      ..drawCircle(
+        Offset(_position.x, _position.y),
+        kShuttleRadius,
+        _shuttlePaint,
+      )
+      ..drawCircle(
+        Offset(_position.x, _position.y),
+        kShuttleRadius,
+        _shuttleOutlinePaint,
+      );
   }
 }
