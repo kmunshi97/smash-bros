@@ -86,7 +86,7 @@ void main() {
         returnsNormally,
         reason:
             'renderTree must not throw in inPlay state; shuttle trail and '
-            'player big-head rendering must produce no crash',
+            'player crewmate rendering must produce no crash',
       );
 
       game.onRemove();

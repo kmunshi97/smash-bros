@@ -1,7 +1,8 @@
 import 'package:flutter/painting.dart';
 
 // ---------------------------------------------------------------------------
-// Game render palette (M1-022..024, reskinned M1-027, stadium restyle)
+// Game render palette (M1-022..024, reskinned M1-027, stadium restyle,
+//   Among Us crewmate skin M1-player-amongus)
 //
 // Single source-of-truth for every colour used by the Flame components.
 // Stadium/cartoon look inspired by Head Ball 2: bright daylight arena,
@@ -121,41 +122,50 @@ abstract final class GamePalette {
   /// Kept as a separate field for compatibility (CourtComponent etc.).
   static const Color netTape = Color(0xFFEE3333);
 
-  // -- Players ----------------------------------------------------------------
+  // -- Players (Among Us crewmate skin) --------------------------------------
 
-  /// Left player team colour — blue family.
-  static const Color leftPlayer = Color(0xFF1565C0);
+  /// Left player suit colour — saturated Among-Us blue.
+  ///
+  /// Chosen for strong contrast against [pitchBase] 0xFF4CAF50 bright green.
+  static const Color leftPlayer = Color(0xFF132ED2);
 
-  /// Right player team colour — red family.
-  static const Color rightPlayer = Color(0xFFC62828);
+  /// Right player suit colour — saturated Among-Us red.
+  ///
+  /// Chosen for strong contrast against [pitchBase] 0xFF4CAF50 bright green.
+  static const Color rightPlayer = Color(0xFFC51111);
 
-  /// Skin tone for the left player's big-head face.
-  static const Color skinToneLeft = Color(0xFFF5CBA7);
+  /// Suit shade colour for the left player — darker tint for the body's lower
+  /// third shading band.
+  static const Color leftPlayerShade = Color(0xFF0E22A0);
 
-  /// Skin tone for the right player's big-head face.
-  static const Color skinToneRight = Color(0xFFD4A574);
+  /// Suit shade colour for the right player — darker tint for the body's lower
+  /// third shading band.
+  static const Color rightPlayerShade = Color(0xFF9A0D0D);
 
-  /// Left player headband colour — bright blue accent strip.
-  static const Color headbandLeft = Color(0xFF2196F3);
+  /// Backpack colour for the left player — suit colour slightly darkened.
+  static const Color leftPlayerBackpack = Color(0xFF0F24B8);
 
-  /// Right player headband colour — bright red accent strip.
-  static const Color headbandRight = Color(0xFFEF5350);
+  /// Backpack colour for the right player — suit colour slightly darkened.
+  static const Color rightPlayerBackpack = Color(0xFFAC0F0F);
 
-  /// White base for player eye whites.
-  static const Color eyeWhite = Color(0xFFFFFFFF);
+  /// Among Us crewmate visor glass — light cyan-grey.
+  static const Color crewmateVisor = Color(0xFF9FD3E0);
 
-  /// Dark pupil colour for player eyes.
-  static const Color eyePupil = Color(0xFF1A1A1A);
+  /// Crewmate visor specular highlight — bright white band in the upper visor.
+  static const Color crewmateVisorHighlight = Color(0xCCFFFFFF);
 
-  /// Dark shoe colour worn by both players.
-  static const Color shoeColor = Color(0xFF212121);
+  /// Crewmate outline colour — very dark navy used for all body outlines.
+  static const Color crewmateOutline = Color(0xFF0A0A14);
+
+  /// Racquet handle colour — dark charcoal (replaces shoeColor for handles).
+  static const Color racquetHandle = Color(0xFF212121);
 
   /// Stun-flash overlay colour — bright white at 70% alpha.
   ///
-  /// Blended over the player every other blink-frame while stunned.
+  /// Blended over the player body every other blink-frame while stunned.
   static const Color stunFlash = Color(0xB3FFFFFF);
 
-  /// Dizzy star colour shown arcing above the head during stun.
+  /// Dizzy star colour shown arcing above the player while stunned.
   static const Color dizzyStarColor = Color(0xFFFFEB3B);
 
   // -- Shuttle ----------------------------------------------------------------

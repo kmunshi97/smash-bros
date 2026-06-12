@@ -12,103 +12,138 @@ import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
 // ---------------------------------------------------------------------------
-// PlayerComponent — M1-023 (reskinned M1-027, depth + swing pass M1-035v)
+// PlayerComponent — M1-player-amongus
+//   (based on M1-023, M1-027, depth + swing pass M1-035v)
 //
-// Draws one player (left or right side) as a cartoon "big-head" character:
-//   • Drop shadow ellipse at kGroundY, fading as the player rises (depth cue).
-//   • Large head circle (80 diameter) centred near the top of the hitbox,
-//     with skin tone, eyes (white + pupil), and a coloured headband strip.
-//   • Short rounded torso (team colour) below the head.
-//   • Two shoe ellipses at the feet (dark).
-//   • Racquet animated through a swing arc over 12 render frames when a
-//     SwingEvent is received for this component's side. While not swinging,
-//     the racquet rests at the static shoulder position.
-//   • Impact flash (white starburst, 4 lines) on the first 3 frames of swing.
-//   • Stun flash overlay (white blink) + 3 dizzy stars arcing above the head.
+// Draws one player as an Among Us crewmate bean character (side view).
+// Painter's order inside render():
+//   0. Drop shadow ellipse at kGroundY (fades/shrinks with jump height).
+//   1. Backpack — rounded rect on the back side of the body.
+//   2. Bean body — tall capsule/rounded-rect (team colour) with shade band and
+//      dark outline. Legs are two stubby rounded-bottom rects with a gap notch.
+//   3. Visor — rounded oval on the upper body facing side, cyan-grey glass with
+//      a white specular band and dark outline.
+//   4. Racquet — animated through a swing arc (12 render frames) when a
+//      SwingEvent is received. Static rest position otherwise. Pivot at the
+//      visor-side mid-body (shoulder).
+//   5. Impact flash (white starburst, 5 lines) on the first 3 swing frames.
+//   6. Stun flash overlay — white blink covers the bean body while stunned.
+//   7. Dizzy stars — 3 stars arc above the bean's domed top while stunned.
 //
 // Tick-order position: rendered after CourtComponent, before ShuttleComponent.
 // ---------------------------------------------------------------------------
 
-// Geometry-rebalance: all proportions sized for the 150-unit-tall, 60-wide
-// hitbox. The big-head look puts the head at ~53% of total height (the
-// reference style is roughly head-half, body-half).
+// ---------------------------------------------------------------------------
+// Bean body geometry (game units, relative to feetY / centreX).
+// ---------------------------------------------------------------------------
 
-// Head geometry (game units).
-const double _kHeadDiameter = 80;
-const double _kHeadRadius = _kHeadDiameter / 2;
-// Head centre is at feetY − _kHeadCentreFromFeet units above feet. The head
-// occupies the top of the hitbox: top of head = 110 + 40 = 150 = hitbox top.
-const double _kHeadCentreFromFeet = 110;
+// Overall bean dimensions. Wider than the 60-unit hitbox for a chunkier look.
+// Body is 78 wide; with the backpack extending ~22 units to the back and the
+// visor overhang of ~16 units, the visual footprint is ~95 wide (_kBeanH = 150).
+const double _kBeanH = 150; // total bean height (== kPlayerHitboxHeight)
 
-// Headband geometry.
-const double _kHeadbandH = 14;
-const double _kHeadbandOffsetFromHeadCentre = 10; // y offset from head centre
+// Body rect is drawn as a tall rounded rectangle; the dome top is captured by
+// the large corner radius. Legs are drawn separately below the body rect.
+const double _kBodyW = 78; // width of the main body rounded rect
+const double _kBodyH =
+    118; // height of the body rect (from leg-top to head dome)
+const double _kBodyCornerR = 36; // large radius gives the domed-top bean shape
 
-// Eye geometry.
-const double _kEyeRadius = 10;
-const double _kPupilRadius = 6;
-const double _kEyeOffsetX = 15; // half-distance between the two eyes
-const double _kEyeOffsetY = 6; // upward offset from head centre
+// Body rect top = feetY − _kLegH − _kBodyH
+const double _kLegH = 26; // height of the stubby leg protrusions
+const double _kLegW =
+    28; // width of each leg (slightly narrower than half body)
+const double _kLegCornerR = 8; // rounded corners on legs
+const double _kLegGap = 8; // horizontal gap between legs
+const double _kLegOffset = _kBodyW / 2 - _kLegW / 2 - _kLegGap / 2;
+// leg centres: centreX ± _kLegOffset
 
-// Torso geometry.
-const double _kTorsoW = 40;
-const double _kTorsoH = 60;
-// Torso top = head bottom (feetY − 70).
-const double _kTorsoTopFromFeet = _kHeadCentreFromFeet - _kHeadRadius;
+// Outline stroke width (essential for the Among Us look).
+const double _kOutlineW = 3;
 
-// Shoe geometry.
-const double _kShoeW = 24;
-const double _kShoeH = 10;
+// Shade band: covers the lower portion of the body with a darker tint.
+// Drawn as a clipped rect inside the body path.
+const double _kShadeBandFraction = 0.38; // fraction of body height from bottom
 
-// Racquet geometry — drawn at shoulder height, swings through an arc.
+// ---------------------------------------------------------------------------
+// Visor geometry.
+// ---------------------------------------------------------------------------
+const double _kVisorW = 50; // width of the visor ellipse
+const double _kVisorH = 30; // height of the visor ellipse
+// Visor centre: vertically at 87% of the body from feet (just inside the dome)
+//   = feetY − _kLegH − _kBodyH * 0.87
+const double _kVisorFromFeet = _kLegH + _kBodyH * 0.87;
+// Horizontal: visor is shifted toward the facing side so it overhangs the body.
+const double _kVisorFacingShift = 16; // shift toward facing direction
+// Specular highlight: upper band inside visor
+const double _kVisorHighlightH = 10;
+
+// ---------------------------------------------------------------------------
+// Backpack geometry.
+// ---------------------------------------------------------------------------
+const double _kBackpackW = 22; // backpack width
+// Backpack runs from 35%–70% of body height above feet.
+const double _kBackpackTop = _kLegH + _kBodyH * 0.35;
+const double _kBackpackBottom = _kLegH + _kBodyH * 0.70;
+const double _kBackpackH = _kBackpackBottom - _kBackpackTop;
+// Backpack X: hugs the back edge of the body.
+const double _kBackpackCornerR = 5;
+
+// ---------------------------------------------------------------------------
+// Racquet geometry (unchanged from previous version).
+// ---------------------------------------------------------------------------
 const double _kRacquetOvalW = 20;
 const double _kRacquetOvalH = 30;
-const double _kRacquetHandleLen = 22; // handle length from shoulder to frame
+const double _kRacquetHandleLen = 22;
 const double _kRacquetHandleW = 4;
-const double _kRacquetFromFeet = 85; // shoulder vertical position above feet
+// Shoulder pivot at visor-side mid-body, ~80 units above feet.
+const double _kRacquetFromFeet = 80;
 
-// Swing animation geometry (in radians; 0 = pointing straight up from shoulder).
-// Normal swing: back position −60°, follow-through +75°.
+// ---------------------------------------------------------------------------
+// Swing animation (angles in radians; 0 = arm pointing straight up).
+// ---------------------------------------------------------------------------
 const double _kSwingBackNormal = -60 * math.pi / 180;
 const double _kSwingFollowNormal = 75 * math.pi / 180;
-// Smash/airborne: wider arc.
 const double _kSwingBackSmash = -90 * math.pi / 180;
 const double _kSwingFollowSmash = 80 * math.pi / 180;
-// Drop shot: gentler arc.
 const double _kSwingBackDrop = -40 * math.pi / 180;
 const double _kSwingFollowDrop = 55 * math.pi / 180;
 
-// Swing animation duration in render frames (~12 ticks at 60 Hz).
+// Swing animation duration in render frames.
 const int _kSwingDuration = 12;
 // Impact flash duration (frames from swing start).
 const int _kFlashDuration = 3;
-// Impact flash geometry.
 const int _kFlashLineCount = 5;
 const double _kFlashLineLen = 10;
 
+// ---------------------------------------------------------------------------
 // Drop shadow geometry.
-const double _kShadowW = 50; // full width of shadow ellipse at ground
-const double _kShadowH = 12; // height of shadow ellipse at ground
+// ---------------------------------------------------------------------------
+const double _kShadowW = 56;
+const double _kShadowH = 14;
 
-// Dizzy star geometry (stun effect).
+// ---------------------------------------------------------------------------
+// Dizzy star geometry (stun effect). Stars orbit above the bean dome.
+// ---------------------------------------------------------------------------
 const double _kStarRadius = 7;
 const int _kStarCount = 3;
 const double _kStarOrbitRadius = 30;
-const double _kStarOrbitOffsetY = 20; // above head centre
+// Orbit centre: above the dome top = feetY − _kBeanH − 20
+const double _kStarOrbitAboveFeet = _kBeanH + 20;
 
-/// Renders one player avatar as a cartoon big-head character.
+/// Renders one player avatar as an Among Us crewmate bean character.
 ///
 /// Responsibilities (pure presentation — no game logic):
 ///  * Each [update] reads the matching [PlayerView] from [BadmintonGame.view]
-///    and sets [position] so the hitbox rect (60 x 150) is anchored at the
-///    player's feet (top-left = (x - 30, feetY - 150)).
+///    and sets [position] so the hitbox rect (60 × 150) is anchored at the
+///    player's feet (top-left = (x − 30, feetY − 150)).
 ///  * [update] also scans [BadmintonGame.frameEvents] for a [SwingEvent]
 ///    matching this component's [side] and starts a 12-frame swing animation.
-///  * [render] draws the cartoon character in painter's order: shadow, shoes,
-///    torso, head, eyes, racquet (animated or static), stun FX.
+///  * [render] draws the crewmate in painter's order: shadow, backpack, bean
+///    body (with shade band and leg notch), visor, racquet, stun FX.
 ///  * Drop shadow fades/shrinks as the player rises (scale by 1 − jumpFraction).
 ///  * When [PlayerView.isStunned], a stun-flash blinks every 8 render frames
-///    AND 3 dizzy stars arc above the head.
+///    AND 3 dizzy stars arc above the bean's dome.
 ///
 /// One [PlayerComponent] instance is created per [CourtSide].
 class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
@@ -118,39 +153,51 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
   /// Which court side this component tracks.
   final CourtSide side;
 
-  // Body paint — team colour.
-  late final Paint _bodyPaint = Paint()
+  // Suit fill — team colour.
+  late final Paint _suitPaint = Paint()
     ..color = side == CourtSide.left
         ? GamePalette.leftPlayer
         : GamePalette.rightPlayer;
 
-  // Skin tone paint per side.
-  late final Paint _skinPaint = Paint()
+  // Suit shade — darker tint for the lower body band.
+  late final Paint _suitShadePaint = Paint()
     ..color = side == CourtSide.left
-        ? GamePalette.skinToneLeft
-        : GamePalette.skinToneRight;
+        ? GamePalette.leftPlayerShade
+        : GamePalette.rightPlayerShade;
 
-  // Headband paint per side.
-  late final Paint _headbandPaint = Paint()
+  // Backpack fill — slightly darker suit colour.
+  late final Paint _backpackPaint = Paint()
     ..color = side == CourtSide.left
-        ? GamePalette.headbandLeft
-        : GamePalette.headbandRight;
+        ? GamePalette.leftPlayerBackpack
+        : GamePalette.rightPlayerBackpack;
 
-  static final _eyeWhitePaint = Paint()..color = GamePalette.eyeWhite;
-  static final _pupilPaint = Paint()..color = GamePalette.eyePupil;
-  static final _shoePaint = Paint()..color = GamePalette.shoeColor;
+  // Dark outline paint shared by body, visor, backpack.
+  static final _outlinePaint = Paint()
+    ..color = GamePalette.crewmateOutline
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = _kOutlineW;
+
+  // Visor fills.
+  static final _visorPaint = Paint()..color = GamePalette.crewmateVisor;
+  static final _visorHighlightPaint = Paint()
+    ..color = GamePalette.crewmateVisorHighlight;
+
+  // Stun / dizzy.
   static final _stunPaint = Paint()..color = GamePalette.stunFlash;
   static final _dizzyStarPaint = Paint()..color = GamePalette.dizzyStarColor;
+
+  // Impact flash.
   static final _flashPaint = Paint()
     ..color = const Color(0xFFFFFFFF)
     ..strokeWidth = 2.5
     ..style = PaintingStyle.stroke;
 
-  // Racquet outline — team colour stroke.
-  late final Paint _racquetOutlinePaint = Paint()
-    ..color = side == CourtSide.left
-        ? GamePalette.leftPlayer
-        : GamePalette.rightPlayer
+  // Racquet head — light string-bed fill + dark outline so the racquet stays
+  // readable against the same-coloured suit body it overlaps at rest.
+  static final _racquetBedPaint = Paint()
+    ..color = const Color(0xD9FFFFFF); // white, ~85% alpha
+  static final _racquetOutlinePaint = Paint()
+    ..color = GamePalette.crewmateOutline
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2.5;
 
@@ -179,7 +226,7 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
 
   /// Current position of this component in game-unit world space.
   ///
-  /// Top-left of the hitbox rect: (x - 30, feetY - 150).
+  /// Top-left of the hitbox rect: (x − 30, feetY − 150).
   Vector2 position = Vector2.zero();
 
   @override
@@ -226,15 +273,11 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
     final pv = _playerView;
     if (pv == null) return;
 
-    // Convenience aliases.
     final feetY = pv.feetY;
     final centreX = pv.x;
     final facingRight = pv.facing == Facing.right;
 
     // -- 0. Drop shadow at kGroundY (depth cue) --------------------------------
-    // The shadow fades and shrinks as the player rises. Scale = 1 when on the
-    // ground, 0 when at the jump apex. Derived from feetY vs kGroundY and
-    // kPlayerJumpHeight.
     final jumpFraction = ((kGroundY - feetY) / kPlayerJumpHeight).clamp(
       0.0,
       1.0,
@@ -255,108 +298,135 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
       );
     }
 
-    // -- 1. Shoes at feet -----------------------------------------------------
+    // Bean body bottom sits at the leg tops; body rect spans _kBodyH above that.
+    final legTopY = feetY - _kLegH;
+    final bodyTopY = legTopY - _kBodyH;
+
+    // Facing direction sign: +1 = right, -1 = left.
+    final facingSign = facingRight ? 1.0 : -1.0;
+
+    // Back edge of the body rect (for backpack attachment).
+    final backEdgeX = centreX - facingSign * (_kBodyW / 2);
+
+    // -- 1. Backpack (behind body — draw first) --------------------------------
+    final backpackLeft = facingRight ? backEdgeX - _kBackpackW : backEdgeX;
+    final backpackTop = feetY - _kBackpackBottom;
     canvas
-      ..drawOval(
-        Rect.fromCenter(
-          center: Offset(centreX - 8, feetY - _kShoeH / 2),
-          width: _kShoeW,
-          height: _kShoeH,
+      ..drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(backpackLeft, backpackTop, _kBackpackW, _kBackpackH),
+          const Radius.circular(_kBackpackCornerR),
         ),
-        _shoePaint,
+        _backpackPaint,
       )
-      ..drawOval(
-        Rect.fromCenter(
-          center: Offset(centreX + 8, feetY - _kShoeH / 2),
-          width: _kShoeW,
-          height: _kShoeH,
+      ..drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(backpackLeft, backpackTop, _kBackpackW, _kBackpackH),
+          const Radius.circular(_kBackpackCornerR),
         ),
-        _shoePaint,
+        _outlinePaint,
       );
 
-    // -- 2. Torso (rounded rect, team colour) ----------------------------------
-    final torsoTop = feetY - _kTorsoTopFromFeet - _kTorsoH;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          centreX - _kTorsoW / 2,
-          torsoTop,
-          _kTorsoW,
-          _kTorsoH,
-        ),
-        const Radius.circular(6),
-      ),
-      _bodyPaint,
+    // -- 2. Bean body (main suit shape) ----------------------------------------
+    // 2a. Body rounded rect fill.
+    final bodyRect = Rect.fromLTWH(
+      centreX - _kBodyW / 2,
+      bodyTopY,
+      _kBodyW,
+      _kBodyH,
     );
+    final bodyRRect = RRect.fromRectAndRadius(
+      bodyRect,
+      const Radius.circular(_kBodyCornerR),
+    );
+    canvas.drawRRect(bodyRRect, _suitPaint);
 
-    // -- 3. Head + 4. Headband (clipped to head circle) ----------------------
-    final headCy = feetY - _kHeadCentreFromFeet;
+    // 2b. Lower-body shade band — clipped to the body shape.
+    // 2c. Body outline — drawn after restoring the clip.
+    const shadeBandH = _kBodyH * _kShadeBandFraction;
     canvas
-      ..drawCircle(Offset(centreX, headCy), _kHeadRadius, _skinPaint)
       ..save()
-      ..clipPath(
-        Path()..addOval(
-          Rect.fromCircle(
-            center: Offset(centreX, headCy),
-            radius: _kHeadRadius,
-          ),
-        ),
-      )
+      ..clipRRect(bodyRRect)
       ..drawRect(
         Rect.fromLTWH(
-          centreX - _kHeadRadius,
-          headCy - _kHeadbandOffsetFromHeadCentre - _kHeadbandH / 2,
-          _kHeadDiameter,
-          _kHeadbandH,
+          centreX - _kBodyW / 2,
+          bodyTopY + _kBodyH - shadeBandH,
+          _kBodyW,
+          shadeBandH,
         ),
-        _headbandPaint,
+        _suitShadePaint,
       )
-      ..restore();
+      ..restore()
+      ..drawRRect(bodyRRect, _outlinePaint);
 
-    // -- 5. Eyes (two circles, pupils look toward facing direction) -----------
-    final pupilShift = facingRight ? 1.5 : -1.5;
-    final eyeY = headCy - _kEyeOffsetY;
-    // All four eye circles in one cascade.
-    canvas
-      ..drawCircle(
-        Offset(centreX - _kEyeOffsetX, eyeY),
-        _kEyeRadius,
-        _eyeWhitePaint,
-      )
-      ..drawCircle(
-        Offset(centreX - _kEyeOffsetX + pupilShift, eyeY),
-        _kPupilRadius,
-        _pupilPaint,
-      )
-      ..drawCircle(
-        Offset(centreX + _kEyeOffsetX, eyeY),
-        _kEyeRadius,
-        _eyeWhitePaint,
-      )
-      ..drawCircle(
-        Offset(centreX + _kEyeOffsetX + pupilShift, eyeY),
-        _kPupilRadius,
-        _pupilPaint,
+    // -- 3. Legs — two stubby rounded-bottom rects with a gap notch -----------
+    // Left leg (relative to body, not facing): centreX − offset.
+    final leftLegCX = centreX - _kLegOffset;
+    final rightLegCX = centreX + _kLegOffset;
+    for (final legCX in [leftLegCX, rightLegCX]) {
+      final legRect = Rect.fromLTWH(
+        legCX - _kLegW / 2,
+        legTopY,
+        _kLegW,
+        _kLegH,
       );
-
-    // -- 6. Racquet (animated swing or static rest position) ------------------
-    _drawRacquet(canvas, feetY, centreX, facingRight);
-
-    // -- 7. Stun flash overlay (blink every 8 frames) -------------------------
-    if (pv.isStunned && (_blinkCounter ~/ 8).isEven) {
-      canvas.drawCircle(Offset(centreX, headCy), _kHeadRadius, _stunPaint);
+      // Only bottom corners rounded (reads as the leg tip).
+      final legRRect = RRect.fromRectAndCorners(
+        legRect,
+        bottomLeft: const Radius.circular(_kLegCornerR),
+        bottomRight: const Radius.circular(_kLegCornerR),
+      );
+      canvas
+        ..drawRRect(legRRect, _suitPaint)
+        ..drawRRect(legRRect, _outlinePaint);
     }
 
-    // -- 8. Dizzy stars (3 stars arcing above head while stunned) -------------
+    // -- 4. Visor (facing side) -----------------------------------------------
+    final visorCX = centreX + facingSign * _kVisorFacingShift;
+    final visorCY = feetY - _kVisorFromFeet;
+    final visorRect = Rect.fromCenter(
+      center: Offset(visorCX, visorCY),
+      width: _kVisorW,
+      height: _kVisorH,
+    );
+    // Visor fill, specular highlight (clipped), and outline.
+    canvas
+      ..drawOval(visorRect, _visorPaint)
+      ..save()
+      ..clipPath(Path()..addOval(visorRect))
+      ..drawRect(
+        Rect.fromLTWH(
+          visorRect.left,
+          visorRect.top,
+          _kVisorW,
+          _kVisorHighlightH,
+        ),
+        _visorHighlightPaint,
+      )
+      ..restore()
+      ..drawOval(visorRect, _outlinePaint);
+
+    // -- 5. Racquet (animated swing or static rest position) ------------------
+    _drawRacquet(canvas, feetY, centreX, facingRight);
+
+    // -- 6. Stun flash overlay (blink every 8 frames; covers body) ------------
+    if (pv.isStunned && (_blinkCounter ~/ 8).isEven) {
+      canvas
+        ..save()
+        ..clipRRect(bodyRRect)
+        ..drawRect(bodyRect, _stunPaint)
+        ..restore();
+    }
+
+    // -- 7. Dizzy stars (3 stars arcing above the dome while stunned) ---------
     if (pv.isStunned) {
-      final angleOffset = _blinkCounter * 0.08; // radians per frame
+      final angleOffset = _blinkCounter * 0.08;
+      final orbitCX = centreX;
+      final orbitCY = feetY - _kStarOrbitAboveFeet;
       for (var i = 0; i < _kStarCount; i++) {
         final angle = angleOffset + i * (2 * math.pi / _kStarCount);
-        final starX = centreX + math.cos(angle) * _kStarOrbitRadius;
-        final starY =
-            headCy -
-            _kStarOrbitOffsetY +
-            math.sin(angle) * (_kStarOrbitRadius * 0.5);
+        final starX = orbitCX + math.cos(angle) * _kStarOrbitRadius;
+        final starY = orbitCY + math.sin(angle) * (_kStarOrbitRadius * 0.5);
         _drawStar(canvas, starX, starY, _kStarRadius, _dizzyStarPaint);
       }
     }
@@ -365,48 +435,36 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
   // Draws the racquet — animated through a swing arc if swinging, or at the
   // static rest position otherwise.
   //
-  // The racquet pivots around the shoulder point. Angle 0 = arm pointing
-  // straight up from shoulder; positive = clockwise (toward the ground on the
-  // right side). For the left-facing player the angles are mirrored.
+  // Pivot is the "shoulder" at visor-side mid-body (~80 units above feet).
+  // Angle 0 = arm pointing straight up from shoulder; positive = clockwise.
   void _drawRacquet(
     Canvas canvas,
     double feetY,
     double centreX,
     bool facingRight,
   ) {
-    // Shoulder position (the pivot for the swing arc).
     final shoulderX = facingRight
-        ? centreX + _kTorsoW / 2
-        : centreX - _kTorsoW / 2;
+        ? centreX + _kBodyW / 2
+        : centreX - _kBodyW / 2;
     final shoulderY = feetY - _kRacquetFromFeet;
 
-    // Compute the current racquet angle.
     double racquetAngle;
     if (_swingFrame < _kSwingDuration) {
-      // Swing in progress — ease-out: t*(2−t).
       final t = _swingFrame / _kSwingDuration;
       final eased = t * (2 - t);
       racquetAngle =
           _swingBackAngle + (_swingFollowAngle - _swingBackAngle) * eased;
     } else {
-      // Static rest: racquet points slightly outward from shoulder.
       racquetAngle = facingRight ? 15 * math.pi / 180 : -15 * math.pi / 180;
     }
 
-    // Mirror angle for left-facing player (facing left means racquet is on the
-    // left side, angles are negated).
     final signedAngle = facingRight ? racquetAngle : -racquetAngle;
 
-    // The racquet frame centre is at the end of the handle from shoulder.
-    // Angle 0 = up (negative y), so sin/cos components:
-    //   dx = sin(signedAngle) * handle (toward +x when angle > 0)
-    //   dy = -cos(signedAngle) * handle (upward when angle ~ 0)
     final handleEndX = shoulderX + math.sin(signedAngle) * _kRacquetHandleLen;
     final handleEndY = shoulderY - math.cos(signedAngle) * _kRacquetHandleLen;
 
-    // Draw handle.
     final handlePaint = Paint()
-      ..color = GamePalette.shoeColor
+      ..color = GamePalette.racquetHandle
       ..strokeWidth = _kRacquetHandleW
       ..style = PaintingStyle.stroke;
 
@@ -417,10 +475,16 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
         Offset(handleEndX, handleEndY),
         handlePaint,
       )
-      // Draw racquet head (oval) — centred at handle end, rotated with swing.
-      // Use canvas transform so the oval aligns with the swing direction.
       ..translate(handleEndX, handleEndY)
       ..rotate(signedAngle)
+      ..drawOval(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: _kRacquetOvalW,
+          height: _kRacquetOvalH,
+        ),
+        _racquetBedPaint,
+      )
       ..drawOval(
         Rect.fromCenter(
           center: Offset.zero,
