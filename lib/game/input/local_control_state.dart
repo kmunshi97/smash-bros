@@ -1,7 +1,7 @@
 import 'package:smash_bros/engine/input/input_action.dart';
 
 // ---------------------------------------------------------------------------
-// LocalControlState — M1-025
+// LocalControlState — M1-025 (updated M1-034)
 //
 // Bridge between the input widgets/keyboard and the simulation's InputBuffer.
 // Written to by UI components and the keyboard handler; drained once per
@@ -9,11 +9,17 @@ import 'package:smash_bros/engine/input/input_action.dart';
 //
 // ## Level vs. edge contract
 //
-// * LEVEL-triggered holds (moveLeft, moveRight): set by button-press/key-down,
-//   cleared by button-release/key-up. Each drainTick() call includes the hold
-//   bit as long as the button remains down — one drain per tick the key is held.
+// * LEVEL-triggered holds (moveLeft, moveRight, tossHeld): set by
+//   button-press/key-down, cleared by button-release/key-up. Each drainTick()
+//   call includes the hold bit as long as the button remains down — one drain
+//   per tick the key is held.
 //
-// * EDGE-triggered one-shots (jump, smash, drop, normal, toss): set by a
+//   NOTE (M1-034): toss was promoted from edge-triggered to LEVEL-triggered to
+//   support the hold-to-charge serve mechanic. The simulation's serve logic
+//   accumulates charge while the toss bit is HIGH and launches on the 1→0
+//   transition. The old `pressToss()` one-shot method has been removed.
+//
+// * EDGE-triggered one-shots (jump, smash, drop, normal): set by a
 //   single call to the press* method and consumed (cleared) by the very next
 //   drainTick() call. Holding the button does NOT repeat the bit; the player
 //   must release and press again to fire the action a second time.
@@ -39,13 +45,20 @@ class LocalControlState {
   /// Whether the move-right button is currently held.
   bool moveRight = false;
 
+  /// Whether the toss button is currently held (M1-034 hold-to-charge serve).
+  ///
+  /// Set true on button-press/key-down; cleared on button-release/key-up or
+  /// when the slot flips away from TOSS (e.g. serve launches and the primary
+  /// button becomes SMASH). Each [drainTick] call includes the toss bit while
+  /// this is `true`, producing the level-held semantics the charge-serve needs.
+  bool tossHeld = false;
+
   // -- Edge-triggered one-shot flags -----------------------------------------
 
   bool _pendingJump = false;
   bool _pendingSmash = false;
   bool _pendingDrop = false;
   bool _pendingNormal = false;
-  bool _pendingToss = false;
 
   // -- One-shot setters -------------------------------------------------------
 
@@ -65,17 +78,14 @@ class LocalControlState {
   /// Schedules a normal (clear/drive) shot for the next [drainTick] call.
   void pressNormal() => _pendingNormal = true;
 
-  /// Schedules a serve toss for the next [drainTick] call.
-  void pressToss() => _pendingToss = true;
-
   // -- Drain -----------------------------------------------------------------
 
   /// Builds the [InputAction] bitmask for one simulation tick and clears all
   /// pending one-shot flags.
   ///
-  /// * Move bits reflect the *current* hold state (level-triggered) — they are
-  ///   NOT cleared; they remain set across multiple ticks until the button is
-  ///   released.
+  /// * Move bits and [tossHeld] reflect the *current* hold state
+  ///   (level-triggered) — they are NOT cleared; they remain set across
+  ///   multiple ticks until the button is released.
   /// * Each pending one-shot bit is included exactly once — the flag is cleared
   ///   immediately, so subsequent ticks see `0` for that action until the
   ///   player presses the button again.
@@ -88,6 +98,7 @@ class LocalControlState {
     // Level-triggered: include hold bits without clearing.
     if (moveLeft) bits |= InputAction.moveLeft;
     if (moveRight) bits |= InputAction.moveRight;
+    if (tossHeld) bits |= InputAction.toss;
 
     // Edge-triggered: include then immediately clear each pending flag.
     if (_pendingJump) {
@@ -105,10 +116,6 @@ class LocalControlState {
     if (_pendingNormal) {
       bits |= InputAction.normalShot;
       _pendingNormal = false;
-    }
-    if (_pendingToss) {
-      bits |= InputAction.toss;
-      _pendingToss = false;
     }
 
     return bits;

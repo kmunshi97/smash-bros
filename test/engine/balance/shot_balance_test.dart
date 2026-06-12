@@ -55,12 +55,20 @@ const double kServeClearanceMargin = 10;
 /// The guaranteed net-crossing y threshold for a valid serve.
 const double kServeNetClearY = kNetTopY - kServeClearanceMargin;
 
-/// Maximum flight time (ticks) for a serve.
+/// Maximum flight time (ticks) for a min-charge serve.
 ///
-/// Empirically (geometry-rebalance): at kTossSpeed=13, kTossAngle=43°,
-/// kShuttleGravity=0.14, the serve from (210, 490) is airborne for 120 ticks.
+/// Empirically (M1-034): at kTossSpeedMin=12, kTossAngle=43°,
+/// kShuttleGravity=0.14, the serve from (210, 490) is airborne for 114 ticks.
 /// The ceiling of 135 ticks (2.25 s) locks in the snappy-feel target.
 const int kServeMaxFlightTicks = 135;
+
+/// Maximum flight time (ticks) for a max-charge serve.
+///
+/// Empirically (M1-034): at kTossSpeedMax=17, kTossAngle=43°,
+/// kShuttleGravity=0.14, the serve from (210, 490) is airborne for 139 ticks.
+/// A deep serve is inherently longer in the air; 150 ticks (2.5 s) is the
+/// ceiling for the full-charge case.
+const int kServeMaxChargeFlightTicks = 150;
 
 /// Maximum flight time (ticks) for a normal clear/drive shot.
 ///
@@ -103,24 +111,28 @@ void main() {
     // 1. SERVE
     // -----------------------------------------------------------------------
     group('1. Serve from left server position ($kServeStartX, $kServeStartY)', () {
-      // The toss has a fixed angle (no PRNG spread), so there is a single
-      // trajectory to test.
+      // The toss has a fixed angle (no PRNG spread); only speed varies.
+      // M1-034 introduced kTossSpeedMin (tap/no-charge) and kTossSpeedMax
+      // (full 45-tick charge). Both must satisfy net clearance and legal-landing
+      // requirements.
       //
       // Right-server trajectories are mirror-symmetric by construction:
       // ShotSystem._upwardArc flips the x-direction (dir = -1) for
-      // CourtSide.right, producing a perfectly mirrored arc. Testing the
-      // left server is therefore sufficient.
+      // CourtSide.right. Testing the left server is therefore sufficient.
       //
-      // Empirical (kTossSpeed=13, kTossAngle=43°, kShuttleGravity=0.14):
-      //   serve from (210, 490): netCrossingY ≈ 307, landingX ≈ 925, 120 ticks.
+      // Empirical (kTossAngle=43°, kShuttleGravity=0.14):
+      //   kTossSpeedMin=12: netCrossingY ≈ 343, landingX ≈ 866, 114 ticks.
+      //   kTossSpeedMax=17: netCrossingY ≈ 220, landingX ≈ 1137, 139 ticks.
+
+      // --- MIN-charge serve (tap, no hold) ------------------------------------
       test(
-        'clears the net by ≥$kServeClearanceMargin units, avoids short-serve, '
-        'and lands in bounds (mirror-symmetric for right server)',
+        'MIN-charge (kTossSpeedMin=$kTossSpeedMin): clears net by ≥$kServeClearanceMargin '
+        'units, lands in [kShortServeLineRight, kCourtRightBound]',
         () {
           final result = TrajectoryHarness.runUpwardArc(
             startX: kServeStartX,
             startY: kServeStartY,
-            speed: kTossSpeed,
+            speed: kTossSpeedMin,
             angleDeg: _degOf(kTossAngle),
             dragCoefficient: kShuttleDragCoefficient,
           );
@@ -129,16 +141,15 @@ void main() {
             result.crossedNet,
             isTrue,
             reason:
-                'Serve from ($kServeStartX, $kServeStartY) must cross the '
-                'net plane; actual trajectory: $result',
+                'MIN-charge serve from ($kServeStartX, $kServeStartY) must '
+                'cross the net plane; trajectory: $result',
           );
           expect(
             result.netCrossingY,
             lessThan(kServeNetClearY),
             reason:
-                'Serve must clear the net top by at least $kServeClearanceMargin '
-                'units (cross at y < $kServeNetClearY = kNetTopY($kNetTopY) − '
-                '$kServeClearanceMargin); '
+                'MIN-charge serve must clear the net top by at least '
+                '$kServeClearanceMargin units (cross at y < $kServeNetClearY); '
                 'actual netCrossingY=${result.netCrossingY.toStringAsFixed(1)}. '
                 'Trajectory: $result',
           );
@@ -146,8 +157,9 @@ void main() {
             result.landingX,
             greaterThanOrEqualTo(kShortServeLineRight),
             reason:
-                'Serve must reach or pass the short-service line '
-                '($kShortServeLineRight); '
+                'MIN-charge serve must NOT be short — must land at or past '
+                'the short-service line ($kShortServeLineRight). A tap-serve '
+                'that auto-faults would be a terrible new-player experience. '
                 'actual landingX=${result.landingX.toStringAsFixed(1)}. '
                 'Trajectory: $result',
           );
@@ -155,7 +167,7 @@ void main() {
             result.landingX,
             lessThanOrEqualTo(kCourtRightBound),
             reason:
-                'Serve must land in bounds (x <= $kCourtRightBound); '
+                'MIN-charge serve must land in bounds (x <= $kCourtRightBound); '
                 'actual landingX=${result.landingX.toStringAsFixed(1)}. '
                 'Trajectory: $result',
           );
@@ -163,13 +175,13 @@ void main() {
       );
 
       test(
-        'flight time ≤ $kServeMaxFlightTicks ticks (snappy-feel target ≤ 2.25 s)',
+        'MIN-charge (kTossSpeedMin=$kTossSpeedMin): flight time ≤ $kServeMaxFlightTicks ticks',
         () {
-          // Empirical: kTossSpeed=13 @43°, kShuttleGravity=0.14 → 120 ticks.
+          // Empirical: kTossSpeedMin=12 @43°, kShuttleGravity=0.14 → 114 ticks.
           final result = TrajectoryHarness.runUpwardArc(
             startX: kServeStartX,
             startY: kServeStartY,
-            speed: kTossSpeed,
+            speed: kTossSpeedMin,
             angleDeg: _degOf(kTossAngle),
             dragCoefficient: kShuttleDragCoefficient,
           );
@@ -178,11 +190,78 @@ void main() {
             result.flightTicks,
             lessThanOrEqualTo(kServeMaxFlightTicks),
             reason:
-                'Serve flight time must be ≤ $kServeMaxFlightTicks ticks '
-                '(≤ ${kServeMaxFlightTicks / 60} s at 60 Hz); '
-                'actual=${result.flightTicks} ticks. '
-                'Raise kTossSpeed or kShuttleGravity if this fails. '
+                'MIN-charge serve flight time must be ≤ $kServeMaxFlightTicks '
+                'ticks (≤ ${kServeMaxFlightTicks / 60} s at 60 Hz); '
+                'actual=${result.flightTicks} ticks. Trajectory: $result',
+          );
+        },
+      );
+
+      // --- MAX-charge serve (full kServeChargeMaxTicks hold) ------------------
+      test(
+        'MAX-charge (kTossSpeedMax=$kTossSpeedMax): clears net by ≥$kServeClearanceMargin '
+        'units and lands deep in [1100, kCourtRightBound=$kCourtRightBound]',
+        () {
+          final result = TrajectoryHarness.runUpwardArc(
+            startX: kServeStartX,
+            startY: kServeStartY,
+            speed: kTossSpeedMax,
+            angleDeg: _degOf(kTossAngle),
+            dragCoefficient: kShuttleDragCoefficient,
+          );
+
+          expect(
+            result.crossedNet,
+            isTrue,
+            reason: 'MAX-charge serve must cross the net; trajectory: $result',
+          );
+          expect(
+            result.netCrossingY,
+            lessThan(kServeNetClearY),
+            reason:
+                'MAX-charge serve must clear the net top by at least '
+                '$kServeClearanceMargin units; '
+                'actual netCrossingY=${result.netCrossingY.toStringAsFixed(1)}. '
                 'Trajectory: $result',
+          );
+          expect(
+            result.landingX,
+            greaterThanOrEqualTo(1100),
+            reason:
+                'MAX-charge serve must land deep (≥ 1100); '
+                'actual landingX=${result.landingX.toStringAsFixed(1)}. '
+                'Trajectory: $result',
+          );
+          expect(
+            result.landingX,
+            lessThanOrEqualTo(kCourtRightBound),
+            reason:
+                'MAX-charge serve must land in bounds (x <= $kCourtRightBound); '
+                'actual landingX=${result.landingX.toStringAsFixed(1)}. '
+                'Trajectory: $result',
+          );
+        },
+      );
+
+      test(
+        'MAX-charge (kTossSpeedMax=$kTossSpeedMax): flight time ≤ $kServeMaxChargeFlightTicks ticks',
+        () {
+          // Empirical: kTossSpeedMax=17 @43°, kShuttleGravity=0.14 → 139 ticks.
+          final result = TrajectoryHarness.runUpwardArc(
+            startX: kServeStartX,
+            startY: kServeStartY,
+            speed: kTossSpeedMax,
+            angleDeg: _degOf(kTossAngle),
+            dragCoefficient: kShuttleDragCoefficient,
+          );
+
+          expect(
+            result.flightTicks,
+            lessThanOrEqualTo(kServeMaxChargeFlightTicks),
+            reason:
+                'MAX-charge serve flight time must be ≤ $kServeMaxChargeFlightTicks '
+                'ticks (≤ ${kServeMaxChargeFlightTicks / 60} s at 60 Hz); '
+                'actual=${result.flightTicks} ticks. Trajectory: $result',
           );
         },
       );
@@ -696,16 +775,27 @@ void main() {
         // Build a real Simulation with seed=1 (arbitrary, deterministic).
         final sim = Simulation(seed: 1)..start();
 
-        // Queue a toss on frame 0 for the left (server) player.
-        sim.state.leftInputs.set(0, InputAction.toss);
+        // M1-034 hold-to-charge: hold toss on frame 0 (charges 1 tick),
+        // release on frame 1 (bit absent → launch). The serve launches on
+        // frame 1 and the FSM moves to inPlay.
+        sim.state.leftInputs.set(0, InputAction.toss); // hold
+        // frame 1 has no toss bit set (default none) → release
 
-        // Tick frame 0: the toss is resolved in the phase-pump step (step 2),
-        // the serve is launched, and the FSM moves to inPlay.
+        // Tick frame 0: toss bit HIGH → charge accumulates (1 tick). Still
+        // in servePending.
+        sim.tick();
+        expect(
+          sim.state.fsm.phase,
+          MatchPhase.servePending,
+          reason: 'Still servePending while button is held (charging).',
+        );
+
+        // Tick frame 1: toss bit LOW with charge=1 → RELEASE → launch.
         sim.tick();
         expect(
           sim.state.fsm.phase,
           MatchPhase.inPlay,
-          reason: 'After toss, FSM must enter inPlay.',
+          reason: 'After charge release, FSM must enter inPlay.',
         );
 
         // Verify the shuttle has rightward (+x) velocity.
@@ -781,10 +871,11 @@ void main() {
   //   kNormalShotSpeed = 12, kNormalShotAngleMin = 45°, kNormalShotAngleMax = 55°
   //   kSmashSpeed = 16, kSmashAngleMin = 10°
   //   kDropShotSpeed = 9, kDropShotAngle = 65°
-  //   kTossSpeed = 13, kTossAngle = 43°
+  //   kTossSpeedMin = 12, kTossSpeedMax = 17, kTossAngle = 43°
   //
   // EMPIRICAL RESULTS WITH NEW GEOMETRY:
-  //   Serve (210, 490):  netCrossY ≈ 307, land ≈ 925, 120 ticks ≤ 135 ✓
+  //   Serve MIN (210, 490): netCrossY ≈ 343, land ≈ 866, 114 ticks ≤ 135 ✓
+  //   Serve MAX (210, 490): netCrossY ≈ 220, land ≈ 1137, 139 ticks ≤ 150 ✓
   //   Normal 45° (300, 480): netCrossY ≈ 299, land ≈ 954, 119 ticks ≤ 135 ✓
   //   Normal 55° (300, 480): netCrossY ≈ 249, land ≈ 886, 132 ticks ≤ 135 ✓
   //   Drop 65° (450, 480):   netCrossY ≈ 304, land ≈ 786, 119 ticks ≤ 120 ✓

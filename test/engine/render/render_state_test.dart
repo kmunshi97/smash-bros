@@ -86,12 +86,15 @@ void main() {
   group('RenderState.capture — SwingEvent from a serve toss', () {
     test('a toss on frame 0 produces a SwingEvent(left, toss, false)', () {
       final sim = Simulation(seed: 42)..start();
-      // Enqueue a toss for the left server on frame 0.
+      // M1-034 hold-to-charge: hold toss bit on frame 0 to charge, then
+      // release on frame 1 (no toss bit) so the serve fires.
       sim.state.leftInputs.set(0, InputAction.toss);
-      sim.tick();
+      sim
+        ..tick() // frame 0: toss HIGH → charge accumulates, still servePending
+        ..tick(); // frame 1: toss absent → release → serve launches
 
       final snap = RenderState.capture(sim);
-      // The toss should have fired during the tick just completed.
+      // The toss fired during the second tick (the release tick).
       expect(snap.events, hasLength(1));
 
       final ev = snap.events.first;
@@ -104,9 +107,12 @@ void main() {
 
     test('SwingResult.side is left for a left-side player', () {
       // This also validates Part A's addition of the `side` field.
+      // M1-034: hold frame 0, release frame 1.
       final sim = Simulation(seed: 42)..start();
       sim.state.leftInputs.set(0, InputAction.toss);
-      sim.tick();
+      sim
+        ..tick() // frame 0: charge
+        ..tick(); // frame 1: release → swing fires
 
       expect(sim.lastTickSwings, hasLength(1));
       expect(sim.lastTickSwings.first.side, CourtSide.left);
@@ -168,15 +174,20 @@ void main() {
 
     test('events are always const [] in a lerped state', () {
       // Create a toss so there is a real event in b.
+      // M1-034: hold frame 0 to charge; release on frame 1 fires the serve.
       final sim = Simulation(seed: 7)..start();
       final a = RenderState.capture(sim);
       sim.state.leftInputs.set(0, InputAction.toss);
-      sim.tick();
+      sim
+        ..tick() // frame 0: charge (servePending, no event)
+        ..tick(); // frame 1: release → serve fires (SwingEvent in b)
       final b = RenderState.capture(sim);
 
-      // b should have a SwingEvent from the toss.
+      // b should have a SwingEvent from the toss release.
       expect(b.events, isNotEmpty);
 
+      // Even though a.frame=0 and b.frame=2 (gap>1, snap rule), the lerp
+      // contract always returns empty events — non-consecutive triggers snap.
       final lerped = RenderState.lerp(a, b, 0.5);
       expect(lerped.events, isEmpty);
     });
@@ -209,15 +220,18 @@ void main() {
 
     test('snap rule: phase change returns b with empty events', () {
       // Drive a toss so a is servePending and b is inPlay.
+      // M1-034: hold frame 0, release frame 1 — serve fires on tick 2.
       final sim = Simulation(seed: 7)..start();
       final a = RenderState.capture(sim);
       expect(a.phase, MatchPhase.servePending);
       sim.state.leftInputs.set(0, InputAction.toss);
-      sim.tick();
+      sim
+        ..tick() // frame 0: charge
+        ..tick(); // frame 1: release → inPlay
       final b = RenderState.capture(sim);
       expect(b.phase, MatchPhase.inPlay);
 
-      // Phases differ → snap to b.
+      // Phases differ (and frames are non-consecutive) → snap to b.
       final result = RenderState.lerp(a, b, 0.5);
       expect(result.shuttle.x, closeTo(b.shuttle.x, 1e-9));
       expect(result.events, isEmpty);
@@ -228,12 +242,15 @@ void main() {
 
   group('SwingResult.side field', () {
     test('right-side player toss produces SwingResult with side = right', () {
+      // M1-034: hold frame 0, release frame 1.
       final sim = Simulation(
         seed: 42,
         firstServer: CourtSide.right,
       )..start();
       sim.state.rightInputs.set(0, InputAction.toss);
-      sim.tick();
+      sim
+        ..tick() // frame 0: charge
+        ..tick(); // frame 1: release → swing fires
 
       expect(sim.lastTickSwings, hasLength(1));
       expect(sim.lastTickSwings.first.side, CourtSide.right);
@@ -241,9 +258,12 @@ void main() {
 
     test('SwingResult equality includes side field', () {
       // Two identical SwingResults with different sides must not be equal.
+      // M1-034: hold frame 0, release frame 1 for both simulations.
       final sim = Simulation(seed: 42)..start();
       sim.state.leftInputs.set(0, InputAction.toss);
-      sim.tick();
+      sim
+        ..tick() // frame 0: charge
+        ..tick(); // frame 1: release → swing fires
       final leftSwing = sim.lastTickSwings.first;
 
       final sim2 = Simulation(
@@ -251,7 +271,9 @@ void main() {
         firstServer: CourtSide.right,
       )..start();
       sim2.state.rightInputs.set(0, InputAction.toss);
-      sim2.tick();
+      sim2
+        ..tick() // frame 0: charge
+        ..tick(); // frame 1: release → swing fires
       final rightSwing = sim2.lastTickSwings.first;
 
       // Same shotType and wasAirborne, different side → not equal.

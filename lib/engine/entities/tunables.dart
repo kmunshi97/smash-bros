@@ -141,8 +141,11 @@ abstract final class Tunables {
   /// Launch angle of a drop shot, in radians (fixed, no spread).
   static const Fix dropShotAngle = Fix.of(kDropShotAngle);
 
-  /// Launch speed of a serve toss, in game units per tick.
-  static const Fix tossSpeed = Fix.of(kTossSpeed);
+  /// Minimum launch speed of a serve toss (tap-release), in game units per tick.
+  static const Fix tossSpeedMin = Fix.of(kTossSpeedMin);
+
+  /// Maximum launch speed of a serve toss (full charge), in game units per tick.
+  static const Fix tossSpeedMax = Fix.of(kTossSpeedMax);
 
   /// Launch angle of a serve toss, in radians (fixed, no spread).
   static const Fix tossAngle = Fix.of(kTossAngle);

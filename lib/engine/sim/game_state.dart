@@ -40,6 +40,7 @@ final class GameState {
     CourtSide firstServer = CourtSide.left,
     int targetScore = kDefaultTargetScore,
   }) : frame = 0,
+       serveChargeTicks = 0,
        court = const Court(),
        random = GameRandom(seed),
        leftPlayer = Player(
@@ -62,6 +63,7 @@ final class GameState {
   /// members without re-running start-of-match initialisation.
   GameState._({
     required this.frame,
+    required this.serveChargeTicks,
     required this.leftPlayer,
     required this.rightPlayer,
     required this.shuttle,
@@ -75,6 +77,15 @@ final class GameState {
 
   /// The current simulation frame, starting at 0 and incremented once per tick.
   int frame;
+
+  /// How many consecutive ticks the server has held the toss button, used to
+  /// compute the charge fraction for the hold-to-charge serve (M1-034).
+  ///
+  /// Only meaningful during `MatchPhase.servePending`. Reset to 0 in
+  /// `Simulation._placeForServe` so each serve attempt starts uncharged. Must
+  /// be included in [copy] and [debugSignature] — omitting either would cause
+  /// rollback desyncs if the charge state diverges between peers.
+  int serveChargeTicks;
 
   /// The player on the left half of the court.
   Player leftPlayer;
@@ -118,6 +129,7 @@ final class GameState {
   /// other.
   GameState copy() => GameState._(
     frame: frame,
+    serveChargeTicks: serveChargeTicks,
     leftPlayer: leftPlayer.copy(),
     rightPlayer: rightPlayer.copy(),
     shuttle: shuttle.copy(),
@@ -149,6 +161,7 @@ final class GameState {
     final r = rightPlayer;
     final s = shuttle;
     return 'f=$frame|'
+        'chg=$serveChargeTicks|'
         'L(${_s(l.x)},${_s(l.y)},${l.facing.name},${_s(l.stamina)},'
         '${l.stunTicksRemaining},${l.jumpTick})|'
         'R(${_s(r.x)},${_s(r.y)},${r.facing.name},${_s(r.stamina)},'

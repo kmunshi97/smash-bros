@@ -13,7 +13,7 @@ void main() {
   // --------------------------------------------------------------------------
   group('BasicAI — serve', () {
     test('right AI serves as server: no toss for first ~44 frames, '
-        'toss emitted within 60, phase leaves servePending', () {
+        'phase leaves servePending within 100 ticks', () {
       // Right side serves the opening point.
       final sim = Simulation(seed: 42, firstServer: CourtSide.right)..start();
       final ai = BasicAI(side: CourtSide.right, seed: 7);
@@ -21,7 +21,11 @@ void main() {
       var tossFrame = -1;
       var tossSeenEarly = false;
 
-      for (var f = 0; f < 60; f++) {
+      // M1-034: AI waits _kServeTossDelay (45) ticks, then holds toss for a
+      // random target in [10, kServeChargeMaxTicks] (= [10, 45]) ticks, then
+      // drops the bit (release) — worst case 45+45+1 = 91 ticks. Use 100
+      // ticks as the bound with some headroom.
+      for (var f = 0; f < 100; f++) {
         final frame = sim.state.frame;
         final bit = ai.decide(sim.state);
         sim.state.leftInputs.set(frame, InputAction.none);
@@ -36,6 +40,9 @@ void main() {
         if (emittedToss && f < 44) {
           tossSeenEarly = true;
         }
+
+        // Break early once the phase has moved — no need to run all 100.
+        if (sim.state.fsm.phase != MatchPhase.servePending) break;
       }
 
       expect(
@@ -46,7 +53,9 @@ void main() {
       expect(
         tossFrame,
         isNot(-1),
-        reason: 'AI should emit toss within 60 ticks',
+        reason:
+            'AI should emit toss within 100 ticks '
+            '(45 delay + up to 45 charge + 1 release)',
       );
 
       // After a successful toss the phase moves to inPlay.

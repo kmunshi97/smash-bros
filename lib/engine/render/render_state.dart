@@ -253,6 +253,7 @@ final class RenderState {
     required this.server,
     required this.pointWinner,
     required this.lastPointReason,
+    required this.serveCharge,
     required this.events,
   });
 
@@ -309,6 +310,10 @@ final class RenderState {
       server: fsm.server,
       pointWinner: fsm.pointWinner,
       lastPointReason: fsm.lastPointReason,
+      serveCharge: (state.serveChargeTicks / kServeChargeMaxTicks).clamp(
+        0.0,
+        1.0,
+      ),
       events: List.unmodifiable(events),
     );
   }
@@ -342,6 +347,10 @@ final class RenderState {
     : this._lerp(a, b, t.clamp(0.0, 1.0));
 
   /// Internal delegate used by [RenderState.lerp] after clamping.
+  ///
+  /// Discrete fields taken from [b]: `frame`, `phase`, `*Score`, `isDeuce`,
+  /// `server`, `pointWinner`, `lastPointReason`, `serveCharge` (UI meter —
+  /// no smoothing needed; always snap to the latest simulation value).
   RenderState._lerp(RenderState a, RenderState b, double t)
     : frame = b.frame,
       phase = b.phase,
@@ -352,6 +361,8 @@ final class RenderState {
       server = b.server,
       pointWinner = b.pointWinner,
       lastPointReason = b.lastPointReason,
+      // serveCharge is a UI meter — taken from b (no lerp needed).
+      serveCharge = b.serveCharge,
       // Events always empty in a lerped state (see docs).
       events = const [],
       // Continuous fields: snap if non-consecutive or phase changed.
@@ -403,6 +414,16 @@ final class RenderState {
 
   /// The reason the last point was awarded, or `null` before the first point.
   final PointReason? lastPointReason;
+
+  /// The server's current charge fraction in `[0, 1]`.
+  ///
+  /// 0 = no charge (button not yet held); 1 = full charge
+  /// ([kServeChargeMaxTicks] ticks held). Only meaningful during
+  /// [MatchPhase.servePending] when the local player is serving; the game
+  /// layer uses this to render the radial charge meter on the TOSS button.
+  /// Computed from `GameState.serveChargeTicks / kServeChargeMaxTicks`,
+  /// clamped to `[0, 1]`.
+  final double serveCharge;
 
   /// The transient events that occurred during this tick.
   ///

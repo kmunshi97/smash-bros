@@ -177,13 +177,41 @@ final class Simulation {
       case MatchPhase.servePending:
         fsm.tickServeTimer(_state.frame);
         // The timeout may have ended the serve in a point this very tick.
-        if (fsm.phase != MatchPhase.servePending) return;
+        if (fsm.phase != MatchPhase.servePending) {
+          // A timeout mid-charge: reset the charge counter so it does not
+          // carry into the next serve attempt.
+          _state.serveChargeTicks = 0;
+          return;
+        }
 
         final serverSide = fsm.server;
         final serverInput = serverSide == CourtSide.left
             ? inputs.left
             : inputs.right;
-        if (!InputAction.has(serverInput, InputAction.toss)) return;
+        final tossHeld = InputAction.has(serverInput, InputAction.toss);
+
+        if (tossHeld) {
+          // Toss bit is HIGH → accumulate charge (cap at kServeChargeMaxTicks).
+          _state.serveChargeTicks = (_state.serveChargeTicks + 1).clamp(
+            0,
+            kServeChargeMaxTicks,
+          );
+          // No launch yet — wait for the bit to go LOW.
+          return;
+        }
+
+        // Toss bit is LOW.
+        if (_state.serveChargeTicks == 0) {
+          // Never held — nothing to do this tick.
+          return;
+        }
+
+        // Bit just went LOW with a non-zero charge → RELEASE: launch the serve.
+        final chargeFraction = _state.serveChargeTicks / kServeChargeMaxTicks;
+        final chargedSpeed = Fix.of(
+          kTossSpeedMin + (kTossSpeedMax - kTossSpeedMin) * chargeFraction,
+        );
+        _state.serveChargeTicks = 0;
 
         final server = _state.playerOn(serverSide);
         final result = ShotSystem.trySwing(
@@ -195,6 +223,7 @@ final class Simulation {
           court: _state.court,
           modifiers: ShotModifiers(
             powerMultiplier: StaminaSystem.effortMultiplier(server),
+            tossSpeedOverride: chargedSpeed,
           ),
         );
         if (result != null) {
@@ -394,6 +423,9 @@ final class Simulation {
   /// Stamina and stun deliberately **persist** across points: carrying fatigue
   /// between rallies is a core design goal, so this resets only position,
   /// facing and the jump arc — not the resource state.
+  ///
+  /// [GameState.serveChargeTicks] is always reset here so a stale charge from
+  /// a previous or interrupted serve (e.g. a LET) does not carry over.
   void _placeForServe() {
     final left = _state.leftPlayer;
     final right = _state.rightPlayer;
@@ -417,6 +449,7 @@ final class Simulation {
     _state.shuttle = Shuttle(position: shuttlePos);
 
     _state.rally.reset();
+    _state.serveChargeTicks = 0;
   }
 
   /// Whether the current phase moves players and ticks their resources.

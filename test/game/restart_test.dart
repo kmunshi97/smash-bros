@@ -82,11 +82,12 @@ void main() {
           .whereType<RestartOverlayComponent>()
           .first;
 
-      // Script a toss to move to inPlay.
-      game.update(kTickDuration * 1);
-      // Inject a toss so left player serves.
-      game.controls.pressToss();
-      game.update(kTickDuration * 1);
+      // Script a toss to move to inPlay (M1-034 hold+release pattern).
+      game.update(kTickDuration); // initial tick
+      game.controls.tossHeld = true;
+      game.update(kTickDuration); // charge
+      game.controls.tossHeld = false;
+      game.update(kTickDuration); // release → serve launches
 
       // Regardless of exact phase, ensure tap-transparency while not matchOver.
       if (game.view.phase != MatchPhase.matchOver) {

@@ -66,7 +66,7 @@ void main() {
   // ---------------------------------------------------------------------------
 
   group('BadmintonGame input wiring — serve toss', () {
-    test('pressToss during servePending with left server '
+    test('hold-to-charge toss during servePending with left server '
         '→ phase leaves servePending or SwingEvent fires', () async {
       final game = await buildGame();
 
@@ -74,10 +74,12 @@ void main() {
       expect(game.view.phase, MatchPhase.servePending);
       expect(game.view.server, CourtSide.left);
 
-      game.controls.pressToss();
-      // A single tick is enough: the toss is processed in the same tick the
-      // bit appears in the input buffer.
-      game.update(kTickDuration);
+      // M1-034: toss is level-triggered. Hold for one tick to build charge,
+      // then release (tossHeld = false) and tick again to launch.
+      game.controls.tossHeld = true;
+      game.update(kTickDuration); // tick 1: charge accumulates
+      game.controls.tossHeld = false;
+      game.update(kTickDuration); // tick 2: release → serve launches
 
       // After a successful toss the phase moves to inPlay (or possibly
       // pointScored if the shuttle immediately lands out, but not servePending).
@@ -92,7 +94,7 @@ void main() {
         tossConnected,
         isTrue,
         reason:
-            'pressing toss during servePending (left server) must either '
+            'hold-toss during servePending (left server) must either '
             'leave servePending or produce a SwingEvent',
       );
       game.onRemove();

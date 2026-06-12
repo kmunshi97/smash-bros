@@ -20,16 +20,28 @@ export 'package:smash_bros/engine/systems/shot_type.dart';
 /// non-identity instances (e.g. a power-stat that raises [powerMultiplier])
 /// and hand them to [ShotSystem.trySwing]; the shot maths already routes every
 /// launch speed through [powerMultiplier], so no further wiring is needed then.
+///
+/// The [tossSpeedOverride] field is used by M1-034's hold-to-charge serve to
+/// supply the lerped charge speed directly. When non-null it replaces the
+/// default toss speed constants before [powerMultiplier] is applied.
 @immutable
 final class ShotModifiers {
   /// Creates modifiers; every field defaults to its neutral value.
-  const ShotModifiers({this.powerMultiplier = Fix.one});
+  const ShotModifiers({this.powerMultiplier = Fix.one, this.tossSpeedOverride});
 
   /// The neutral instance used by every swing until Milestone 3 loadouts land.
   static const ShotModifiers identity = ShotModifiers();
 
   /// Multiplier applied to the launch speed of every shot.
   final Fix powerMultiplier;
+
+  /// When non-null, overrides the toss speed constants ([Tunables.tossSpeedMin]
+  /// / [Tunables.tossSpeedMax]) for this swing. Used by the hold-to-charge
+  /// serve (M1-034) to inject the lerped charge speed without duplicating
+  /// the launch-velocity computation.
+  ///
+  /// Ignored for all shot types except [ShotType.toss].
+  final Fix? tossSpeedOverride;
 }
 
 /// The record of a swing that connected.
@@ -186,13 +198,11 @@ abstract final class ShotSystem {
         );
         rally.activeDragCoefficient = Tunables.shuttleDropShotDrag;
       case ShotType.toss:
-        // Fixed angle, so no PRNG draw.
-        velocity = _upwardArc(
-          Tunables.tossAngle,
-          Tunables.tossSpeed,
-          dir,
-          modifiers,
-        );
+        // Fixed angle, so no PRNG draw. Speed comes from the charge override
+        // if provided (M1-034 hold-to-charge serve), otherwise falls back to
+        // the minimum toss speed (a tap with no charge).
+        final tossSpeed = modifiers.tossSpeedOverride ?? Tunables.tossSpeedMin;
+        velocity = _upwardArc(Tunables.tossAngle, tossSpeed, dir, modifiers);
         rally.activeDragCoefficient = Tunables.shuttleDragCoefficient;
     }
 

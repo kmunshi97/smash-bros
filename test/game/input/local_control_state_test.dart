@@ -1,4 +1,4 @@
-// LocalControlState unit tests (M1-025).
+// LocalControlState unit tests (M1-025, updated M1-034).
 // Tests the level-vs-edge semantics documented in the class header.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smash_bros/engine/input/input_action.dart';
@@ -105,10 +105,24 @@ void main() {
       expect(InputAction.has(c.drainTick(), InputAction.normalShot), isFalse);
     });
 
-    test('pressToss fires once and is cleared', () {
-      final c = LocalControlState()..pressToss();
-      expect(InputAction.has(c.drainTick(), InputAction.toss), isTrue);
-      expect(InputAction.has(c.drainTick(), InputAction.toss), isFalse);
+    // toss is now LEVEL-triggered (M1-034 hold-to-charge serve).
+    // It lives in the level-hold group but is tested here to keep all
+    // one-shot tests together and preserve the test's original intent.
+    test('tossHeld is level-triggered: held over 3 drains → 3 toss bits', () {
+      final c = LocalControlState()..tossHeld = true;
+      for (var i = 0; i < 3; i++) {
+        expect(
+          InputAction.has(c.drainTick(), InputAction.toss),
+          isTrue,
+          reason: 'drain $i: toss bit must be set while tossHeld is true',
+        );
+      }
+      c.tossHeld = false;
+      expect(
+        InputAction.has(c.drainTick(), InputAction.toss),
+        isFalse,
+        reason: 'toss bit must clear once tossHeld is set to false',
+      );
     });
   });
 
@@ -133,17 +147,20 @@ void main() {
     });
 
     test('all one-shots cleared after first drain; hold bits survive', () {
+      // toss is now level-triggered (M1-034) — set tossHeld and then clear it.
       final c = LocalControlState()
         ..moveLeft = true
+        ..tossHeld =
+            true // level-held
         ..pressJump()
         ..pressSmash()
         ..pressDrop()
         ..pressNormal()
-        ..pressToss()
-        ..drainTick(); // drain one-shots
+        ..drainTick() // consume one-shots and emit toss (still held)
+        ..tossHeld = false; // release toss hold
 
       final second = c.drainTick();
-      // Only move bits remain.
+      // Only moveLeft remains (tossHeld was cleared before this drain).
       expect(InputAction.has(second, InputAction.moveLeft), isTrue);
       expect(InputAction.has(second, InputAction.jump), isFalse);
       expect(InputAction.has(second, InputAction.smash), isFalse);

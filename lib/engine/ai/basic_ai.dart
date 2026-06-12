@@ -55,9 +55,13 @@ const int _kShotMixSmashMax = 90; // [70, 90) → smash
 ///
 /// ### Serving ([MatchPhase.servePending], AI is server)
 ///
-/// Waits [_kServeTossDelay] ticks after entering the serve phase, then emits
-/// [InputAction.toss] once. If the phase remains `servePending` (unlikely —
-/// the toss whiffed), retries every [_kServeTossRetryInterval] ticks.
+/// Waits [_kServeTossDelay] ticks after entering the serve phase, then draws a
+/// target charge duration from its private PRNG: a random number of ticks in
+/// `[10, kServeChargeMaxTicks]`. It then HOLDS [InputAction.toss] for that many
+/// ticks (emitting the bit every tick while charging), then drops the bit to
+/// release the serve. If the phase somehow remains `servePending` after the
+/// release (very unlikely — the toss whiffed), retries on the next
+/// [_kServeTossRetryInterval] boundary.
 ///
 /// ### Rally ([MatchPhase.inPlay])
 ///
@@ -86,6 +90,8 @@ const int _kShotMixSmashMax = 90; // [70, 90) → smash
 ///
 /// * `_lastSeenPhase` — detects phase transitions for the serve-delay timer.
 /// * `_servePhaseTicksSeen` — ticks since entering the current serve phase.
+/// * `_serveChargeTarget` — target hold duration (ticks) drawn once per serve.
+/// * `_serveHeldTicks` — how many ticks the toss bit has been held this serve.
 /// * `_lastSeenShuttleSide` — detects when the shuttle crosses to this side.
 /// * `_reactionTicksRemaining` — countdown for the reaction delay.
 /// * `_swingCooldownRemaining` — ticks to hold off before attempting a swing.
@@ -106,6 +112,15 @@ final class BasicAI implements AIController {
 
   MatchPhase? _lastSeenPhase;
   int _servePhaseTicksSeen = 0;
+
+  /// Target number of ticks to hold the toss bit this serve, drawn once per
+  /// serve attempt from [_random]. `null` means the target has not been drawn
+  /// yet for the current serve phase entry.
+  int? _serveChargeTarget;
+
+  /// How many ticks the toss bit has been held in the current charge window.
+  int _serveHeldTicks = 0;
+
   CourtSide? _lastSeenShuttleSide;
   int _reactionTicksRemaining = 0;
   int _swingCooldownRemaining = 0;
@@ -140,22 +155,46 @@ final class BasicAI implements AIController {
       return InputAction.none;
     }
 
-    // Detect phase entry to reset the tick counter.
+    // Detect phase entry to reset the tick counter and charge state.
     if (_lastSeenPhase != MatchPhase.servePending) {
       _servePhaseTicksSeen = 0;
+      _serveChargeTarget = null;
+      _serveHeldTicks = 0;
       _lastSeenPhase = MatchPhase.servePending;
     }
 
     _servePhaseTicksSeen++;
 
-    // Wait for the initial delay, then toss once; retry every N ticks if still
-    // stuck in servePending (should be rare — the toss would have to whiff).
+    // -- Initial delay --------------------------------------------------------
     final ticksInWindow = _servePhaseTicksSeen - _kServeTossDelay;
-    if (ticksInWindow >= 0 &&
-        (ticksInWindow == 0 || ticksInWindow % _kServeTossRetryInterval == 0)) {
+    if (ticksInWindow < 0) {
+      // Still waiting out the initial pause — emit nothing.
+      return InputAction.none;
+    }
+
+    // -- Charge window --------------------------------------------------------
+    // Draw the target charge on the very first tick past the delay (or on a
+    // retry boundary). The target is in [10, kServeChargeMaxTicks].
+    if (_serveChargeTarget == null ||
+        (ticksInWindow > 0 &&
+            ticksInWindow % _kServeTossRetryInterval == 0 &&
+            _serveHeldTicks == 0)) {
+      // New charge draw: hold for 10..kServeChargeMaxTicks ticks.
+      _serveChargeTarget = _random.nextInt(kServeChargeMaxTicks - 10) + 10;
+      _serveHeldTicks = 0;
+    }
+
+    final target = _serveChargeTarget!;
+    if (_serveHeldTicks < target) {
+      // Still within the charge window — keep the toss bit HIGH.
+      _serveHeldTicks++;
       return InputAction.toss;
     }
 
+    // Target reached — drop the bit (release = launch).
+    // Reset so a retry starts a fresh charge on the next window boundary.
+    _serveChargeTarget = null;
+    _serveHeldTicks = 0;
     return InputAction.none;
   }
 
@@ -251,6 +290,8 @@ final class BasicAI implements AIController {
     if (_lastSeenPhase != current) {
       _lastSeenPhase = current;
       _servePhaseTicksSeen = 0;
+      _serveChargeTarget = null;
+      _serveHeldTicks = 0;
       _lastSeenShuttleSide = null;
       _reactionTicksRemaining = 0;
       _swingCooldownRemaining = 0;
