@@ -254,23 +254,45 @@ const double kDropShotSpeed = 9;
 /// short-service line (840), preserving the drop shot's tactical distinctness.
 const double kDropShotAngle = 65 * (pi / 180);
 
-/// Launch speed of a serve toss.
+/// Minimum launch speed of a serve toss (shortest legal serve).
 ///
-/// Retuned (M1-032a retune) from 9 → 13 game-units/tick.
-/// Unchanged at 13 through the geometry-rebalance. From the new serve start
-/// position (kPlayer1StartX + kServeShuttleOffsetX, kGroundY − kServeShuttleHeight)
-/// = (210, 490), speed 13 at 43° crosses the new net top (470) at y ≈ 307
-/// (163 units of clearance) and lands at x ≈ 925, past the short-service
-/// line (840) and inside the baseline (1240), in 120 ticks (≤ 135 target).
-const double kTossSpeed = 13;
+/// Introduced in M1-034 (hold-to-charge serve) to replace the removed
+/// `kTossSpeed` constant. A short-tap (0 held ticks) launches at this speed.
+///
+/// Tuned at 43° from the serve start position (210, 490):
+///   speed 12 → netCrossingY ≈ 343 (127 units above kNetTopY 470, well clear),
+///   landingX ≈ 866 — past the short-service line (840) so it is LEGAL,
+///   flight 114 ticks.
+/// A brand-new player who taps once without charging cannot auto-fault.
+const double kTossSpeedMin = 12;
+
+/// Maximum launch speed of a serve toss (deepest charge, full hold).
+///
+/// Introduced in M1-034 (hold-to-charge serve) to replace the removed
+/// `kTossSpeed` constant. A full-charge hold ([kServeChargeMaxTicks] ticks)
+/// launches at this speed.
+///
+/// Tuned at 43° from the serve start position (210, 490):
+///   speed 17 → netCrossingY ≈ 220 (250 units of clearance),
+///   landingX ≈ 1137 — deep in the receiver court, 103 units short of
+///   the baseline (1240), flight 139 ticks.
+const double kTossSpeedMax = 17;
 
 /// Launch angle of a serve toss, in radians.
 ///
 /// Retuned (M1-032a retune) from 45° → 43°.
-/// Unchanged at 43° through the geometry-rebalance. From the new serve height
-/// (y = 490 vs old 520), the 43° arc gives 163 units of clearance above the
-/// new net top (470) — ample margin while keeping the landing in bounds.
+/// Unchanged at 43° through the geometry-rebalance (M1-033) and the
+/// hold-to-charge serve (M1-034). At 43°, both [kTossSpeedMin] and
+/// [kTossSpeedMax] satisfy the net-clearance (≥10 units) and legal-landing
+/// requirements without any angle adjustment.
 const double kTossAngle = 43 * (pi / 180);
+
+/// Maximum ticks the server can hold the toss button to charge a full serve.
+///
+/// Introduced in M1-034. Charge fraction = held ticks / kServeChargeMaxTicks,
+/// clamped to 1.0. At 60 ticks/sec this is 0.75 s to full charge, a
+/// comfortable window for touch input.
+const int kServeChargeMaxTicks = 45;
 
 // ---------------------------------------------------------------------------
 // Timing (in frames at 60 fps)
@@ -297,7 +319,12 @@ const int kStunDurationFrames = 60;
 const int kBlockLookaheadMaxTicks = 30;
 
 /// Frames before a serve times out.
-const int kServeTimeoutFrames = 300;
+///
+/// Raised from 300 → 600 in M1-034 (hold-to-charge serve). The charging
+/// mechanic consumes serve time while the button is held, so the old 5 s
+/// window was too tight for a player who wants to wind up a full charge
+/// (0.75 s) after some movement. At 60 ticks/sec, 600 frames = 10 s.
+const int kServeTimeoutFrames = 600;
 
 // ---------------------------------------------------------------------------
 // Stamina

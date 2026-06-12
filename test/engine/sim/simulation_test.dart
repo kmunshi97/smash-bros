@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
@@ -7,6 +9,7 @@ import 'package:smash_bros/engine/input/input_buffer.dart';
 import 'package:smash_bros/engine/math/fix.dart';
 import 'package:smash_bros/engine/rules/match_phase.dart';
 import 'package:smash_bros/engine/rules/point_reason.dart';
+import 'package:smash_bros/engine/sim/game_state.dart';
 import 'package:smash_bros/engine/sim/simulation.dart';
 import 'package:smash_bros/engine/systems/collision_system.dart';
 
@@ -15,6 +18,25 @@ void _hold(InputBuffer buffer, int bitmask, int from, int to) {
   for (var f = from; f <= to; f++) {
     buffer.set(f, bitmask);
   }
+}
+
+/// Queues a serve for [sim]'s server player at the current frame.
+///
+/// Hold-to-charge semantics (M1-034): the toss bit must be HIGH for
+/// [holdTicks] consecutive frames and then LOW for one frame before the launch
+/// fires. The minimum is [holdTicks] = 1 (hold one tick, release the next).
+///
+/// After calling, advance the simulation by [holdTicks] + 1 ticks to consume
+/// the queued serve.
+void _enqueueServe(Simulation sim, {int holdTicks = 1}) {
+  final f = sim.state.frame;
+  final serverSide = sim.state.fsm.server;
+  final buf = sim.state.inputsOn(serverSide);
+  // Hold toss bit for holdTicks consecutive frames.
+  for (var i = 0; i < holdTicks; i++) {
+    buf.set(f + i, InputAction.toss);
+  }
+  // Frame f + holdTicks has no toss bit (default InputAction.none) → release.
 }
 
 /// Ticks [sim] until [test] holds or [maxTicks] elapse; returns the tick count.
@@ -65,10 +87,18 @@ void main() {
   });
 
   group('serve flow', () {
-    test('a toss launches the serve upward toward play and reaches inPlay', () {
+    test('a toss launches the serve upward toward play and reaches inPlay '
+        '(M1-034: hold frame 0, release frame 1)', () {
       final sim = Simulation(seed: 1)..start();
-      sim.state.leftInputs.set(0, InputAction.toss);
-      sim.tick(); // frame 0: the toss is consumed in the phase pump.
+      // Hold-to-charge: hold toss on frame 0, release on frame 1.
+      _enqueueServe(sim); // holdTicks=1: sets frame 0, frame 1 is none.
+      sim.tick(); // frame 0: toss bit HIGH → charge accumulates, still servePending.
+      expect(
+        sim.state.fsm.phase,
+        MatchPhase.servePending,
+        reason: 'Holding toss must NOT immediately launch the serve.',
+      );
+      sim.tick(); // frame 1: toss bit absent → release → launch.
 
       expect(sim.state.fsm.phase, MatchPhase.inPlay);
       // The toss is an upward lob: negative y velocity (up the screen) and a
@@ -172,15 +202,12 @@ void main() {
   group('scripted point from a real serve', () {
     test('a toss crosses the net and lands in the receiver half — '
         'server wins the point (or short-serve fault)', () {
-      // M1-032a: the serve constants were tuned so the toss reaches the
-      // receiver's half of the court.  A shuttle landing IN on the right
-      // half means the LEFT (server) wins the point via groundedIn.
-      // If the serve lands short of the short-service line (640–840), the
-      // receiver wins via shortServeFault instead.  Either outcome confirms
-      // the shuttle crossed the net — the old KNOWN-BROKEN behaviour (serve
-      // falls back on the server's own half) is hereby inverted.
+      // M1-034: hold-to-charge — hold for 1 tick then release.
+      // kTossSpeedMin (@43°) lands at ≈ 866, past the short-service line (840),
+      // so this should be groundedIn. Either groundedIn or shortServeFault
+      // confirms net-crossing.
       final sim = Simulation(seed: 1)..start();
-      sim.state.leftInputs.set(0, InputAction.toss);
+      _enqueueServe(sim); // hold frame 0, release frame 1
 
       GroundHit? landing;
       _tickUntil(sim, () {
@@ -196,8 +223,7 @@ void main() {
       expect(landing!.side, CourtSide.right);
       // The point reason is either groundedIn (server wins, shuttle past the
       // short-service line) or shortServeFault (receiver wins, shuttle in
-      // the 640–840 zone).  Both confirm net-crossing — a landing on the
-      // LEFT half (groundedIn + pointWinner = right) would mean regression.
+      // the 640–840 zone).  Both confirm net-crossing.
       expect(
         sim.state.fsm.lastPointReason,
         anyOf(PointReason.groundedIn, PointReason.shortServeFault),
@@ -206,10 +232,18 @@ void main() {
   });
 
   group('presentation outputs', () {
-    test('lastTickSwings is populated on the toss tick and cleared after', () {
+    test('lastTickSwings is populated on the release tick and cleared after '
+        '(M1-034: swing fires on the bit-LOW frame)', () {
       final sim = Simulation(seed: 1)..start();
-      sim.state.leftInputs.set(0, InputAction.toss);
-      sim.tick(); // toss connects this tick
+      // Hold frame 0 (charge), release frame 1 (launch).
+      _enqueueServe(sim); // holdTicks=1
+      sim.tick(); // frame 0: charging — no swing yet
+      expect(
+        sim.lastTickSwings,
+        isEmpty,
+        reason: 'No swing should fire while the toss bit is still held.',
+      );
+      sim.tick(); // frame 1: release → toss connects
       expect(sim.lastTickSwings, hasLength(1));
 
       sim.tick(); // a quiet in-play tick: no new swing
@@ -218,8 +252,11 @@ void main() {
 
     test('lastTickCollisions is populated on the landing tick', () {
       final sim = Simulation(seed: 1)..start();
-      sim.state.leftInputs.set(0, InputAction.toss);
-      sim.tick(); // consume the toss -> inPlay
+      _enqueueServe(sim); // hold frame 0, release frame 1
+      // frame 0: charging; frame 1: launch → inPlay
+      sim
+        ..tick()
+        ..tick();
       var sawCollision = false;
       _tickUntil(sim, () {
         if (sim.lastTickCollisions.isNotEmpty) sawCollision = true;
@@ -239,11 +276,14 @@ void main() {
       final a = Simulation(seed: 20240611)..start();
       final b = Simulation(seed: 20240611)..start();
 
-      // A rich, identical input script for both: a serve, jumps, movement and
-      // shot attempts spread across the first few hundred frames.
+      // A rich, identical input script for both: a serve (hold+release),
+      // jumps, movement and shot attempts spread across the first few hundred
+      // frames.
       for (final sim in [a, b]) {
+        // M1-034: hold frame 0 (charge), release frame 1.
         sim.state.leftInputs.set(0, InputAction.toss);
-        _hold(sim.state.leftInputs, InputAction.moveRight, 1, 40);
+        // frame 1 has no toss bit → release (default InputAction.none).
+        _hold(sim.state.leftInputs, InputAction.moveRight, 2, 41);
         _hold(
           sim.state.leftInputs,
           InputAction.jump | InputAction.smash,
@@ -278,14 +318,15 @@ void main() {
     test('repeated max-power smashes never exceed the shuttle speed cap and '
         'keep the shuttle within generous world bounds', () {
       final sim = Simulation(seed: 5)..start();
-      // Serve, then both sides mash smash + jump forever. Inputs are written
-      // one frame ahead inside the loop so the ring buffer never evicts a frame
-      // before it is read (writing 5000 frames up front would).
-      sim.state.leftInputs.set(0, InputAction.toss);
+      // Serve (hold frame 0, release frame 1), then both sides mash smash +
+      // jump forever. Inputs are written one frame ahead inside the loop so
+      // the ring buffer never evicts a frame before it is read.
+      sim.state.leftInputs.set(0, InputAction.toss); // hold frame 0
+      // frame 1 has no toss bit → release → launch
 
       for (var i = 0; i < 5000; i++) {
         final f = sim.state.frame;
-        if (f >= 1) {
+        if (f >= 2) {
           sim.state.leftInputs.set(f, InputAction.jump | InputAction.smash);
         }
         sim.state.rightInputs.set(f, InputAction.jump | InputAction.smash);
@@ -299,6 +340,137 @@ void main() {
         expect(p.x.abs().toDouble(), lessThan(5000));
         expect(p.y.toDouble(), lessThan(kGroundY + 1));
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // M1-034: hold-to-charge serve
+  // ---------------------------------------------------------------------------
+
+  group('hold-to-charge serve (M1-034)', () {
+    test('holding N ticks then releasing fires SwingEvent on the release tick '
+        'and launch speed matches lerped expectation', () {
+      const holdTicks = 20; // charge fraction = 20/45 ≈ 0.444
+
+      final sim = Simulation(seed: 1)..start();
+      _enqueueServe(sim, holdTicks: holdTicks);
+
+      // Tick through the hold frames — no swing should fire.
+      for (var i = 0; i < holdTicks; i++) {
+        sim.tick();
+        expect(
+          sim.lastTickSwings,
+          isEmpty,
+          reason: 'No swing while toss bit still held (tick $i).',
+        );
+        expect(sim.state.fsm.phase, MatchPhase.servePending);
+      }
+
+      // One more tick (release frame) — swing must fire.
+      sim.tick();
+      expect(
+        sim.lastTickSwings,
+        hasLength(1),
+        reason: 'SwingEvent must fire on the release tick.',
+      );
+      expect(sim.state.fsm.phase, MatchPhase.inPlay);
+
+      // Verify launch speed is within [kTossSpeedMin, kTossSpeedMax].
+      // Stamina multiplier is ~1.0 at full stamina, so speed should be very
+      // close to the raw lerped value.
+      final launchVx = sim.lastTickSwings.first.launchVelocity.x.toDouble();
+      final launchVy = sim.lastTickSwings.first.launchVelocity.y.toDouble();
+      final launchSpeed = math.sqrt(launchVx * launchVx + launchVy * launchVy);
+      const chargeFraction = holdTicks / kServeChargeMaxTicks;
+      const expectedSpeed =
+          kTossSpeedMin + (kTossSpeedMax - kTossSpeedMin) * chargeFraction;
+      // Allow ±0.1 for floating-point rounding through Fix.
+      expect(
+        launchSpeed,
+        closeTo(expectedSpeed, 0.1),
+        reason: 'Launch speed must match lerp(min, max, $chargeFraction).',
+      );
+    });
+
+    test('charge caps at kServeChargeMaxTicks — holding 100 ticks gives the '
+        'same speed as holding kServeChargeMaxTicks ticks', () {
+      double runAndGetSpeed(int holdTicks) {
+        final sim = Simulation(seed: 1)..start();
+        _enqueueServe(sim, holdTicks: holdTicks);
+        for (var i = 0; i <= holdTicks; i++) {
+          sim.tick();
+        }
+        final vx = sim.lastTickSwings.first.launchVelocity.x.toDouble();
+        final vy = sim.lastTickSwings.first.launchVelocity.y.toDouble();
+        return math.sqrt(vx * vx + vy * vy);
+      }
+
+      final speedMax = runAndGetSpeed(kServeChargeMaxTicks);
+      final speedOverflow = runAndGetSpeed(100); // exceeds cap
+      expect(
+        speedOverflow,
+        closeTo(speedMax, 0.001),
+        reason:
+            'Speed at holdTicks=100 must equal speed at kServeChargeMaxTicks '
+            '(charge is clamped).',
+      );
+    });
+
+    test(
+      'timeout mid-charge → fault to receiver and serveChargeTicks reset',
+      () {
+        final sim = Simulation(seed: 1)..start();
+        // Start charging but never release — let the serve time out.
+        // Timeout fires at kServeTimeoutFrames ticks.
+        for (var f = 0; f < kServeTimeoutFrames; f++) {
+          sim.state.leftInputs.set(f, InputAction.toss); // hold every frame
+        }
+        // Tick past the timeout.
+        for (var i = 0; i < kServeTimeoutFrames + 1; i++) {
+          sim.tick();
+        }
+        // The FSM awarded the point to the receiver (right side).
+        expect(
+          sim.state.fsm.phase,
+          anyOf(MatchPhase.pointScored, MatchPhase.servePending),
+          reason: 'After timeout the point must be scored.',
+        );
+        // serveChargeTicks must be reset to 0 after the timeout.
+        expect(
+          sim.state.serveChargeTicks,
+          0,
+          reason: 'serveChargeTicks must be reset to 0 after a timeout.',
+        );
+      },
+    );
+
+    test('serveChargeTicks appears in debugSignature — two states differing '
+        'only in charge produce different signatures', () {
+      final a = GameState(seed: 1);
+      final b = GameState(seed: 1)..serveChargeTicks = 10;
+      expect(
+        a.debugSignature,
+        isNot(b.debugSignature),
+        reason:
+            'debugSignature must include serveChargeTicks so rollback can '
+            'detect desync in charge state.',
+      );
+    });
+
+    test('GameState.copy preserves serveChargeTicks', () {
+      final original = GameState(seed: 1)..serveChargeTicks = 23;
+      final clone = original.copy();
+      expect(
+        clone.serveChargeTicks,
+        23,
+        reason: 'copy() must deep-copy serveChargeTicks.',
+      );
+      clone.serveChargeTicks = 99;
+      expect(
+        original.serveChargeTicks,
+        23,
+        reason: 'Mutating the copy must not affect the original.',
+      );
     });
   });
 }
