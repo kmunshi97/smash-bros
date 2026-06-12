@@ -7,10 +7,19 @@ import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
 // ---------------------------------------------------------------------------
-// ActionButtonsComponent — M1-025
+// ActionButtonsComponent — M1-025 (reskinned M1-027)
 //
 // Cluster of circular action buttons anchored to the bottom-right of the HUD
 // viewport. Buttons fire one-shot press* calls on LocalControlState.
+//
+// Visual changes in M1-027:
+//   • Chunky circular buttons in orange-gold (GamePalette.buttonFace) with a
+//     3-unit darker outline, a lighter bevel arc on the top ~45%, and a bold
+//     dark-brown label.
+//   • TOSS slot retains serveAccent face colour so it still stands out.
+//   • Pressed state fills the face with buttonPressed (brighter gold).
+//
+// Geometry, hit areas, and callbacks are UNCHANGED from M1-025.
 //
 // Physical-size reasoning
 // -----------------------
@@ -33,8 +42,9 @@ const double _kButtonRadius = 48; // game units — diameter 96 gu
 const double _kButtonDiameter = _kButtonRadius * 2;
 const double _kButtonSpacing = 10;
 const double _kEdgeMargin = 12;
+const double _kOutlineWidth = 3;
 
-/// A single circular action button.
+/// A single circular action button with the new Head-Ball-style look.
 class _ActionButton extends PositionComponent with TapCallbacks {
   _ActionButton({
     required String label,
@@ -56,11 +66,16 @@ class _ActionButton extends PositionComponent with TapCallbacks {
 
   static final TextPaint _textPaint = TextPaint(
     style: const TextStyle(
-      fontSize: 22,
-      color: GamePalette.courtLines,
+      fontSize: 20,
+      color: GamePalette.buttonGlyph,
       fontWeight: FontWeight.bold,
     ),
   );
+
+  static final Paint _outlinePaint = Paint()
+    ..color = GamePalette.buttonOutline
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = _kOutlineWidth;
 
   /// Updates the button's label, action, and colour (used by the serve slot).
   void reconfigure({
@@ -91,13 +106,43 @@ class _ActionButton extends PositionComponent with TapCallbacks {
 
   @override
   void render(Canvas canvas) {
-    final paint = Paint()
-      ..color = _pressed ? _color.withAlpha(255) : _color.withAlpha(180);
+    const centre = Offset(_kButtonRadius, _kButtonRadius);
+
+    // 1. Button face.
+    final facePaint = Paint()
+      ..color = _pressed ? GamePalette.buttonPressed : _color;
+    canvas.drawCircle(centre, _kButtonRadius, facePaint);
+
+    // 2. Bevel highlight — lighter arc on the top ~45% of the circle.
+    //    Skip when pressed to reinforce the depth illusion.
+    if (!_pressed) {
+      final bevelPaint = Paint()
+        ..color = GamePalette.buttonBevel.withAlpha(120);
+      // Use a clipping arc on the top half.
+      final bevelPath = Path()
+        ..addArc(
+          Rect.fromCircle(center: centre, radius: _kButtonRadius - 3),
+          // Start at 200° and sweep through 140° (top-left to top-right arc).
+          200 * 3.14159 / 180,
+          140 * 3.14159 / 180,
+        )
+        ..lineTo(centre.dx, centre.dy)
+        ..close();
+      canvas
+        ..save()
+        ..clipPath(bevelPath)
+        ..drawCircle(centre, _kButtonRadius - 3, bevelPaint)
+        ..restore();
+    }
+
+    // 3. Dark outline.
     canvas.drawCircle(
-      const Offset(_kButtonRadius, _kButtonRadius),
-      _kButtonRadius,
-      paint,
+      centre,
+      _kButtonRadius - _kOutlineWidth / 2,
+      _outlinePaint,
     );
+
+    // 4. Label text.
     _textPaint.render(
       canvas,
       _label,
@@ -141,25 +186,25 @@ class ActionButtonsComponent extends Component
     _jumpButton = _ActionButton(
       label: 'JUMP',
       onPress: game.controls.pressJump,
-      color: GamePalette.leftPlayer,
+      color: GamePalette.buttonFace,
       position: _pos(col: 0, row: 0),
     );
     _primaryButton = _ActionButton(
       label: 'SMASH',
       onPress: game.controls.pressSmash,
-      color: GamePalette.rightPlayer,
+      color: GamePalette.buttonFace,
       position: _pos(col: 1, row: 0),
     );
     _dropButton = _ActionButton(
       label: 'DROP',
       onPress: game.controls.pressDrop,
-      color: GamePalette.netTape,
+      color: GamePalette.buttonFace,
       position: _pos(col: 0, row: 1),
     );
     _clearButton = _ActionButton(
       label: 'CLEAR',
       onPress: game.controls.pressNormal,
-      color: GamePalette.leftPlayer,
+      color: GamePalette.buttonFace,
       position: _pos(col: 1, row: 1),
     );
     await addAll([_jumpButton, _primaryButton, _dropButton, _clearButton]);
@@ -191,7 +236,7 @@ class ActionButtonsComponent extends Component
       _primaryButton.reconfigure(
         label: 'SMASH',
         onPress: game.controls.pressSmash,
-        color: GamePalette.rightPlayer,
+        color: GamePalette.buttonFace,
       );
     }
   }

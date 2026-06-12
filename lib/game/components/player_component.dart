@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flame/components.dart';
 import 'package:flutter/painting.dart';
 import 'package:smash_bros/engine/constants.dart';
@@ -8,28 +10,75 @@ import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
 // ---------------------------------------------------------------------------
-// PlayerComponent — M1-023
+// PlayerComponent — M1-023 (reskinned M1-027)
 //
-// Draws one player (left or right side) as a filled hitbox rectangle with a
-// facing marker and a stun-flash blink overlay. This component carries NO
-// game logic and reads ONLY game.view for positional data — it is pure
-// presentation.
+// Draws one player (left or right side) as a cartoon "big-head" character:
+//   • Large head circle (≈52 diameter) centred near the top of the hitbox,
+//     with skin tone, eyes (white + pupil), and a coloured headband strip.
+//   • Short rounded torso (team colour) below the head.
+//   • Two shoe ellipses at the feet (dark).
+//   • Racquet hint on the facing side — a small oval outline + handle — that
+//     flips with facing direction.
+//   • Stun flash overlay (white blink) + 3 dizzy stars arcing above the head.
+//
+// Position/feet-anchor logic is UNCHANGED from M1-023. Only render() is
+// rewritten.
 //
 // Tick-order position: rendered after CourtComponent, before ShuttleComponent.
 // ---------------------------------------------------------------------------
 
-/// Renders one player avatar (a coloured hitbox rect with a facing notch).
+// Head geometry (game units).
+const double _kHeadDiameter = 52;
+const double _kHeadRadius = _kHeadDiameter / 2;
+// Head centre is at feetY − _kHeadCentreFromFeet units above feet.
+const double _kHeadCentreFromFeet = 54;
+
+// Headband geometry.
+const double _kHeadbandH = 9;
+const double _kHeadbandOffsetFromHeadCentre = 6; // y offset from head centre
+
+// Eye geometry.
+const double _kEyeRadius = 7;
+const double _kPupilRadius = 4.5;
+const double _kEyeOffsetX = 10; // half-distance between the two eyes
+const double _kEyeOffsetY = 4; // upward offset from head centre
+
+// Torso geometry.
+const double _kTorsoW = 30;
+const double _kTorsoH = 22;
+// Torso top = head bottom.
+const double _kTorsoTopFromFeet = _kHeadCentreFromFeet - _kHeadRadius;
+
+// Shoe geometry.
+const double _kShoeW = 18;
+const double _kShoeH = 8;
+
+// Racquet geometry — oval + handle on the facing side.
+const double _kRacquetOvalW = 14;
+const double _kRacquetOvalH = 20;
+const double _kRacquetHandleW = 3;
+const double _kRacquetFromFeet = 40; // vertical position above feet
+
+// Dizzy star geometry (stun effect).
+const double _kStarRadius = 5;
+const int _kStarCount = 3;
+const double _kStarOrbitRadius = 22;
+const double _kStarOrbitOffsetY = 14; // above head centre
+
+/// Renders one player avatar as a cartoon big-head character.
 ///
 /// Responsibilities (pure presentation — no game logic):
 ///  * Each [update] reads the matching [PlayerView] from [BadmintonGame.view]
-///    and sets this component's [position] so the hitbox rect (48 x 80) is
-///    anchored at the player's feet (top-left = (x - 24, feetY - 80)).
-///  * [render] fills the hitbox with the side's palette colour.
-///  * When [PlayerView.isStunned], a stun-flash overlay blinks every 8
-///    render frames (frame-count based, not wall-clock — testable and
-///    deterministic at the render layer).
-///  * A 6 x 6 notch on the facing edge at racquet height marks the direction
-///    the player is facing, so sprite-less build is still readable.
+///    and sets [position] so the hitbox rect (48 x 80) is anchored at the
+///    player's feet (top-left = (x - 24, feetY - 80)).
+///  * [render] draws the cartoon character within (approximately within) the
+///    hitbox. The large head may overflow the hitbox by up to ~15% (≈4 units
+///    on each side of the 48-unit width), which is within the allowed overflow
+///    in the PR spec.
+///  * When [PlayerView.isStunned], a stun-flash blinks every 8 render frames
+///    AND 3 dizzy stars arc above the head.
+///  * Racquet flips with [PlayerView.facing] so the contact-zone side is
+///    always on the correct side.
 ///
 /// One [PlayerComponent] instance is created per [CourtSide].
 class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
@@ -39,15 +88,37 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
   /// Which court side this component tracks.
   final CourtSide side;
 
-  // Pre-built Paint objects.
+  // Body paint — team colour.
   late final Paint _bodyPaint = Paint()
     ..color = side == CourtSide.left
         ? GamePalette.leftPlayer
         : GamePalette.rightPlayer;
+
+  // Skin tone paint per side.
+  late final Paint _skinPaint = Paint()
+    ..color = side == CourtSide.left
+        ? GamePalette.skinToneLeft
+        : GamePalette.skinToneRight;
+
+  // Headband paint per side.
+  late final Paint _headbandPaint = Paint()
+    ..color = side == CourtSide.left
+        ? GamePalette.headbandLeft
+        : GamePalette.headbandRight;
+
+  static final _eyeWhitePaint = Paint()..color = GamePalette.eyeWhite;
+  static final _pupilPaint = Paint()..color = GamePalette.eyePupil;
+  static final _shoePaint = Paint()..color = GamePalette.shoeColor;
   static final _stunPaint = Paint()..color = GamePalette.stunFlash;
-  static final _facingPaint = Paint()
-    ..color = GamePalette.background
-    ..style = PaintingStyle.fill;
+  static final _dizzyStarPaint = Paint()..color = GamePalette.dizzyStarColor;
+
+  // Racquet outline — team colour stroke.
+  late final Paint _racquetOutlinePaint = Paint()
+    ..color = side == CourtSide.left
+        ? GamePalette.leftPlayer
+        : GamePalette.rightPlayer
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.5;
 
   // Stun-blink state: purely cosmetic frame counter.
   int _blinkCounter = 0;
@@ -64,7 +135,7 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
   void update(double dt) {
     final pv = _playerViewFromGame();
     _playerView = pv;
-    // Anchor: top-left of the 48x80 hitbox.
+    // Anchor: top-left of the 48×80 hitbox.
     position = Vector2(
       pv.x - kPlayerHitboxWidth / 2,
       pv.feetY - kPlayerHitboxHeight,
@@ -77,37 +148,170 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
     final pv = _playerView;
     if (pv == null) return;
 
-    final rect = Rect.fromLTWH(
-      position.x,
-      position.y,
-      kPlayerHitboxWidth,
-      kPlayerHitboxHeight,
+    // Convenience aliases.
+    final feetY = pv.feetY;
+    final centreX = pv.x;
+    final facingRight = pv.facing == Facing.right;
+
+    // -- 1. Shoes at feet -----------------------------------------------------
+    canvas
+      ..drawOval(
+        Rect.fromCenter(
+          center: Offset(centreX - 8, feetY - _kShoeH / 2),
+          width: _kShoeW,
+          height: _kShoeH,
+        ),
+        _shoePaint,
+      )
+      ..drawOval(
+        Rect.fromCenter(
+          center: Offset(centreX + 8, feetY - _kShoeH / 2),
+          width: _kShoeW,
+          height: _kShoeH,
+        ),
+        _shoePaint,
+      );
+
+    // -- 2. Torso (rounded rect, team colour) ----------------------------------
+    final torsoTop = feetY - _kTorsoTopFromFeet - _kTorsoH;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          centreX - _kTorsoW / 2,
+          torsoTop,
+          _kTorsoW,
+          _kTorsoH,
+        ),
+        const Radius.circular(6),
+      ),
+      _bodyPaint,
     );
 
-    // 1. Fill player body.
-    canvas.drawRect(rect, _bodyPaint);
+    // -- 3. Head + 4. Headband (clipped to head circle) ----------------------
+    final headCy = feetY - _kHeadCentreFromFeet;
+    canvas
+      ..drawCircle(Offset(centreX, headCy), _kHeadRadius, _skinPaint)
+      ..save()
+      ..clipPath(
+        Path()..addOval(
+          Rect.fromCircle(
+            center: Offset(centreX, headCy),
+            radius: _kHeadRadius,
+          ),
+        ),
+      )
+      ..drawRect(
+        Rect.fromLTWH(
+          centreX - _kHeadRadius,
+          headCy - _kHeadbandOffsetFromHeadCentre - _kHeadbandH / 2,
+          _kHeadDiameter,
+          _kHeadbandH,
+        ),
+        _headbandPaint,
+      )
+      ..restore();
 
-    // 2. Stun flash overlay — blinks every 8 render frames.
+    // -- 5. Eyes (two circles, pupils look toward facing direction) -----------
+    final pupilShift = facingRight ? 1.5 : -1.5;
+    final eyeY = headCy - _kEyeOffsetY;
+    // All four eye circles in one cascade.
+    canvas
+      ..drawCircle(
+        Offset(centreX - _kEyeOffsetX, eyeY),
+        _kEyeRadius,
+        _eyeWhitePaint,
+      )
+      ..drawCircle(
+        Offset(centreX - _kEyeOffsetX + pupilShift, eyeY),
+        _kPupilRadius,
+        _pupilPaint,
+      )
+      ..drawCircle(
+        Offset(centreX + _kEyeOffsetX, eyeY),
+        _kEyeRadius,
+        _eyeWhitePaint,
+      )
+      ..drawCircle(
+        Offset(centreX + _kEyeOffsetX + pupilShift, eyeY),
+        _kPupilRadius,
+        _pupilPaint,
+      );
+
+    // -- 6. Racquet hint on the facing side -----------------------------------
+    // Oval outline at racquet height + handle from body edge to oval.
+    final racquetY = feetY - _kRacquetFromFeet;
+    final ovalCX = facingRight
+        ? centreX + _kTorsoW / 2 + _kRacquetOvalW / 2
+        : centreX - _kTorsoW / 2 - _kRacquetOvalW / 2;
+    final handleX1 = facingRight
+        ? centreX + _kTorsoW / 2
+        : centreX - _kTorsoW / 2;
+    final handleX2 = facingRight
+        ? ovalCX - _kRacquetOvalW / 2
+        : ovalCX + _kRacquetOvalW / 2;
+    final handlePaint = Paint()
+      ..color = GamePalette.shoeColor
+      ..strokeWidth = _kRacquetHandleW
+      ..style = PaintingStyle.stroke;
+    canvas
+      ..drawLine(
+        Offset(handleX1, racquetY),
+        Offset(handleX2, racquetY),
+        handlePaint,
+      )
+      ..drawOval(
+        Rect.fromCenter(
+          center: Offset(ovalCX, racquetY),
+          width: _kRacquetOvalW,
+          height: _kRacquetOvalH,
+        ),
+        _racquetOutlinePaint,
+      );
+
+    // -- 7. Stun flash overlay (blink every 8 frames) -------------------------
     if (pv.isStunned && (_blinkCounter ~/ 8).isEven) {
-      canvas.drawRect(rect, _stunPaint);
+      canvas.drawCircle(Offset(centreX, headCy), _kHeadRadius, _stunPaint);
     }
 
-    // 3. Facing notch — a 6x6 filled square on the leading edge at racquet
-    //    height (~40 units above the feet = 40 units from bottom of hitbox).
-    const notchSize = 6.0;
-    const racquetHeightFromFeet = 40.0;
-    final notchY =
-        position.y +
-        kPlayerHitboxHeight -
-        racquetHeightFromFeet -
-        notchSize / 2;
-    final notchX = pv.facing == Facing.right
-        ? position.x + kPlayerHitboxWidth - notchSize
-        : position.x;
-    canvas.drawRect(
-      Rect.fromLTWH(notchX, notchY, notchSize, notchSize),
-      _facingPaint,
-    );
+    // -- 8. Dizzy stars (3 stars arcing above head while stunned) -------------
+    if (pv.isStunned) {
+      final angleOffset = _blinkCounter * 0.08; // radians per frame
+      for (var i = 0; i < _kStarCount; i++) {
+        final angle = angleOffset + i * (2 * math.pi / _kStarCount);
+        final starX = centreX + math.cos(angle) * _kStarOrbitRadius;
+        final starY =
+            headCy -
+            _kStarOrbitOffsetY +
+            math.sin(angle) * (_kStarOrbitRadius * 0.5);
+        _drawStar(canvas, starX, starY, _kStarRadius, _dizzyStarPaint);
+      }
+    }
+  }
+
+  /// Draws a 5-pointed star centred at ([cx],[cy]) with outer [radius].
+  void _drawStar(
+    Canvas canvas,
+    double cx,
+    double cy,
+    double radius,
+    Paint paint,
+  ) {
+    const points = 5;
+    const innerRadiusFraction = 0.45;
+    final path = Path();
+    for (var i = 0; i < points * 2; i++) {
+      final r = i.isEven ? radius : radius * innerRadiusFraction;
+      final angle = (i * math.pi / points) - math.pi / 2;
+      final x = cx + r * math.cos(angle);
+      final y = cy + r * math.sin(angle);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, paint);
   }
 
   PlayerView _playerViewFromGame() {
