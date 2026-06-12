@@ -37,14 +37,12 @@ int _tickUntil(
 // Constants used by assertions (named for readability in failure messages)
 // ---------------------------------------------------------------------------
 
-/// X coordinate of the serve-start shuttle (kPlayer1StartX + kServeShuttleOffsetX).
-///
-/// kPlayer1StartX = kCourtLeftBound + 120 = 40 + 120 = 160.
-/// Shuttle offset toward net (rightward) = kServeShuttleOffsetX = 40.
-/// So serve launch position = 200.
+/// X coordinate of the serve-start shuttle
+/// (kPlayer1StartX + kServeShuttleOffsetX = 160 + 50 = 210).
 const double kServeStartX = kPlayer1StartX + kServeShuttleOffsetX;
 
-/// Y coordinate of the serve-start shuttle (kGroundY - kServeShuttleHeight).
+/// Y coordinate of the serve-start shuttle
+/// (kGroundY - kServeShuttleHeight = 600 - 110 = 490).
 const double kServeStartY = kGroundY - kServeShuttleHeight;
 
 /// Minimum clearance above the net top that a serve must achieve.
@@ -59,50 +57,65 @@ const double kServeNetClearY = kNetTopY - kServeClearanceMargin;
 
 /// Maximum flight time (ticks) for a serve.
 ///
-/// Empirically: at kTossSpeed=13, kTossAngle=43°, kShuttleGravity=0.14,
-/// the serve from (200, 520) is airborne for 117 ticks.  The ceiling of 135
-/// ticks (2.25 s) locks in the snappy-feel target and guards against future
-/// constants accidentally re-introducing floatiness.
+/// Empirically (geometry-rebalance): at kTossSpeed=13, kTossAngle=43°,
+/// kShuttleGravity=0.14, the serve from (210, 490) is airborne for 120 ticks.
+/// The ceiling of 135 ticks (2.25 s) locks in the snappy-feel target.
 const int kServeMaxFlightTicks = 135;
 
 /// Maximum flight time (ticks) for a normal clear/drive shot.
 ///
-/// Empirically: at kNormalShotSpeed=12, kShuttleGravity=0.14, the defensive
-/// shot from (300, 520) is airborne for 114 ticks (min angle) to 128 ticks
-/// (max angle).  The ceiling of 135 ticks (2.25 s) is the snappy-feel target.
+/// Empirically (geometry-rebalance): at kNormalShotSpeed=12,
+/// kShuttleGravity=0.14, the defensive shot from (300, 480) is airborne for
+/// 119–132 ticks. The ceiling of 135 ticks (2.25 s) is the snappy-feel target.
 const int kNormalMaxFlightTicks = 135;
 
 /// Maximum flight time (ticks) for a drop shot.
 ///
-/// Empirically: at kDropShotSpeed=9, kDropShotAngle=65°, kShuttleGravity=0.14,
-/// the drop from (450, 520) is airborne for 115 ticks.  The ceiling of 120
-/// ticks (2.0 s) keeps the drop shot feeling tight and distinct from a clear.
+/// Empirically (geometry-rebalance): at kDropShotSpeed=9, kDropShotAngle=65°,
+/// kShuttleGravity=0.14, the drop from (450, 480) is airborne for 119 ticks.
+/// The ceiling of 120 ticks (2.0 s) keeps the drop distinct from a clear.
 const int kDropMaxFlightTicks = 120;
+
+// ---------------------------------------------------------------------------
+// New geometry contact-height constants (for readability in test descriptions)
+// ---------------------------------------------------------------------------
+
+/// Standard grounded drive contact y — hitbox top 450 (= 600 − 150), waist.
+const double kGroundedDriveY = 480;
+
+/// Grounded overhead contact y — hitbox top (450) minus racquet reach (50).
+const double kGroundedOverheadY = 405;
+
+/// Jump overhead contact y — feet at apex (460) minus height (150) minus
+/// racquet reach (50) = 260; use 265 as a conservative realistic estimate.
+const double kJumpOverheadY = 265;
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 void main() {
-  // Part A: the harness itself is exercised as a by-product of every test
-  // below — a harness that produces wrong results would immediately break the
-  // balance assertions.
+  // The harness itself is exercised as a by-product of every test below —
+  // a harness producing wrong results would break all balance assertions.
 
-  group('Part B — Shot balance (M1-032a)', () {
+  group('Part B — Shot balance (geometry-rebalance)', () {
     // -----------------------------------------------------------------------
     // 1. SERVE
     // -----------------------------------------------------------------------
-    group('1. Serve from left server position', () {
+    group('1. Serve from left server position ($kServeStartX, $kServeStartY)', () {
       // The toss has a fixed angle (no PRNG spread), so there is a single
       // trajectory to test.
       //
       // Right-server trajectories are mirror-symmetric by construction:
       // ShotSystem._upwardArc flips the x-direction (dir = -1) for
-      // CourtSide.right, producing a perfectly mirrored arc.  Testing the
+      // CourtSide.right, producing a perfectly mirrored arc. Testing the
       // left server is therefore sufficient.
+      //
+      // Empirical (kTossSpeed=13, kTossAngle=43°, kShuttleGravity=0.14):
+      //   serve from (210, 490): netCrossingY ≈ 307, landingX ≈ 925, 120 ticks.
       test(
-        'clears the net, avoids short-serve, and lands in bounds '
-        '(mirror-symmetric for right server by direction-flip)',
+        'clears the net by ≥$kServeClearanceMargin units, avoids short-serve, '
+        'and lands in bounds (mirror-symmetric for right server)',
         () {
           final result = TrajectoryHarness.runUpwardArc(
             startX: kServeStartX,
@@ -124,7 +137,8 @@ void main() {
             lessThan(kServeNetClearY),
             reason:
                 'Serve must clear the net top by at least $kServeClearanceMargin '
-                'units (cross at y < $kServeNetClearY); '
+                'units (cross at y < $kServeNetClearY = kNetTopY($kNetTopY) − '
+                '$kServeClearanceMargin); '
                 'actual netCrossingY=${result.netCrossingY.toStringAsFixed(1)}. '
                 'Trajectory: $result',
           );
@@ -132,7 +146,8 @@ void main() {
             result.landingX,
             greaterThanOrEqualTo(kShortServeLineRight),
             reason:
-                'Serve must reach or pass the short-service line ($kShortServeLineRight); '
+                'Serve must reach or pass the short-service line '
+                '($kShortServeLineRight); '
                 'actual landingX=${result.landingX.toStringAsFixed(1)}. '
                 'Trajectory: $result',
           );
@@ -148,10 +163,9 @@ void main() {
       );
 
       test(
-        'flight time ≤ $kServeMaxFlightTicks ticks (snappy-feel target: no more than 2.25 s in the air)',
+        'flight time ≤ $kServeMaxFlightTicks ticks (snappy-feel target ≤ 2.25 s)',
         () {
-          // Empirical baseline: kTossSpeed=13 @43°, kShuttleGravity=0.14
-          // → 117 ticks.  Ceiling guards against future gravity regressions.
+          // Empirical: kTossSpeed=13 @43°, kShuttleGravity=0.14 → 120 ticks.
           final result = TrajectoryHarness.runUpwardArc(
             startX: kServeStartX,
             startY: kServeStartY,
@@ -165,7 +179,7 @@ void main() {
             lessThanOrEqualTo(kServeMaxFlightTicks),
             reason:
                 'Serve flight time must be ≤ $kServeMaxFlightTicks ticks '
-                '(≤ ${kServeMaxFlightTicks / 60} s at 60 Hz) to feel snappy; '
+                '(≤ ${kServeMaxFlightTicks / 60} s at 60 Hz); '
                 'actual=${result.flightTicks} ticks. '
                 'Raise kTossSpeed or kShuttleGravity if this fails. '
                 'Trajectory: $result',
@@ -175,17 +189,20 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // 2 & 3. NORMAL shot
+    // 2. NORMAL shot
     // -----------------------------------------------------------------------
-    group('2 & 3. Normal shot', () {
+    group('2. Normal shot from grounded drive contact (300, $kGroundedDriveY)', () {
       // The normal shot has a PRNG-drawn angle in [kNormalShotAngleMin,
-      // kNormalShotAngleMax].  Verifying both extremes (min and max angle)
-      // is sufficient because the trajectory is monotone in angle over the
-      // tested range.
+      // kNormalShotAngleMax]. Verifying both extremes is sufficient because
+      // the trajectory is monotone in angle over the tested range.
+      //
+      // Empirical (kNormalShotSpeed=12, kShuttleGravity=0.14):
+      //   45°: netCrossingY ≈ 299, landingX ≈ 954, 119 ticks.
+      //   55°: netCrossingY ≈ 249, landingX ≈ 886, 132 ticks.
 
       test(
-        'from defensive position (300, 520) at both angle extremes: '
-        'clears the net and lands in the opponent half in bounds',
+        'both angle extremes: clears the net (crossing y < kNetTopY=$kNetTopY) '
+        'and lands in the opponent half in bounds',
         () {
           for (final angleDeg in [
             _degOf(kNormalShotAngleMin),
@@ -193,7 +210,7 @@ void main() {
           ]) {
             final result = TrajectoryHarness.runUpwardArc(
               startX: 300,
-              startY: 520,
+              startY: kGroundedDriveY,
               speed: kNormalShotSpeed,
               angleDeg: angleDeg,
               dragCoefficient: kShuttleDragCoefficient,
@@ -236,18 +253,16 @@ void main() {
       );
 
       test(
-        'from defensive position (300, 520) at both angle extremes: '
-        'flight time ≤ $kNormalMaxFlightTicks ticks (snappy-feel target)',
+        'both angle extremes: flight time ≤ $kNormalMaxFlightTicks ticks '
+        '(snappy-feel target)',
         () {
-          // Empirical baseline: kNormalShotSpeed=12, kShuttleGravity=0.14
-          // → 114 ticks @ 45°, 128 ticks @ 55°.
           for (final angleDeg in [
             _degOf(kNormalShotAngleMin),
             _degOf(kNormalShotAngleMax),
           ]) {
             final result = TrajectoryHarness.runUpwardArc(
               startX: 300,
-              startY: 520,
+              startY: kGroundedDriveY,
               speed: kNormalShotSpeed,
               angleDeg: angleDeg,
               dragCoefficient: kShuttleDragCoefficient,
@@ -268,41 +283,26 @@ void main() {
       );
 
       // -----------------------------------------------------------------------
-      // Near-net normal shot — option (b): net fault documented as intentional
+      // Near-net normal shot — now a CLEAN PASS with the lower net
       // -----------------------------------------------------------------------
       //
-      // CONSTRAINT ANALYSIS (M1-032a retune):
+      // CONSTRAINT ANALYSIS (geometry-rebalance):
       //
-      // From the near-net position (560, 520), the shuttle starts only 80 units
-      // from the net (x = 640) and 170 units below the net top (y = 350).
-      // At kNormalShotSpeed = 12 and kShuttleGravity = 0.14 the shuttle cannot
-      // arc high enough over those 80 horizontal units to clear the net:
+      // With kNetTopY = 470 (vs old 350), the near-net position (560, 480) is
+      // only 80 units from the net (x = 640) and 10 units below the net top.
+      // At kNormalShotSpeed = 12 and kShuttleGravity = 0.14, the shuttle
+      // arcs over the much lower net with ease:
       //
-      //   min angle (45°): net crossing y ≈ 447 — below the tape band bottom
-      //                    (kNetTopY + kNetTapeHeight = 358).
-      //   max angle (55°): net crossing y ≈ 417 — also below the tape bottom.
+      //   min angle (45°): netCrossingY ≈ 407 — above the net top (470) ✓
+      //   max angle (55°): netCrossingY ≈ 377 — above the net top (470) ✓
       //
-      // This is OPTION (b): "crosses below the tape — net fault; acceptable
-      // because clearing a LOW shuttle right at the net is risky in real
-      // badminton."  Documented here instead of left hand-waved.
-      //
-      // WHY THIS IS CORRECT:
-      //   - A player standing at x = 560 hitting a shuttle at waist height
-      //     (y = 520) barely has room to arc the shuttle over a 350-height net
-      //     that is only 80 units away.  In real badminton this shot is a
-      //     net-cord error unless executed as a cross-court dribble (not
-      //     modelled).
-      //   - The constraint "near-net must not sail out" no longer wins over
-      //     "the shot must clear the net", because option (b) is a VALID
-      //     physical outcome rather than a bug: hitting into the net is a
-      //     mistake the PLAYER makes, not a physics fault.
-      //   - We prefer option (b) over lowering the shot speed (which would
-      //     either make defensive shots bounce off the net or sail out) or
-      //     raising the angle beyond 55° (which would make all shots arch so
-      //     high they look comically floaty).
+      // This is the OPPOSITE of the old behaviour (where the high net turned
+      // this into a net fault). The near-net normal is now legal — clearing
+      // a low shuttle near the net is a valid (if risky) play when the net
+      // is at realistic badminton proportions.
       test(
-        'from near-net position (560, 520) at both angle extremes: '
-        'OPTION (b) — crosses below the tape band (net fault, intentional)',
+        'from near-net position (560, $kGroundedDriveY) at both angle extremes: '
+        'clears the lower net (clean pass, not a net fault)',
         () {
           for (final angleDeg in [
             _degOf(kNormalShotAngleMin),
@@ -310,166 +310,30 @@ void main() {
           ]) {
             final result = TrajectoryHarness.runUpwardArc(
               startX: 560,
-              startY: 520,
+              startY: kGroundedDriveY,
               speed: kNormalShotSpeed,
               angleDeg: angleDeg,
               dragCoefficient: kShuttleDragCoefficient,
             );
 
-            // The shuttle must cross the net plane (x = kNetX) — it does
-            // reach x = 640, just too low.
             expect(
               result.crossedNet,
               isTrue,
               reason:
                   'Near-net normal at ${angleDeg.toStringAsFixed(1)}° must '
-                  'at least reach the net plane; trajectory: $result',
+                  'reach the net plane; trajectory: $result',
             );
 
-            // Crossing y must be BELOW the tape bottom — i.e. a net-body hit,
-            // not a clean passage.  kNetTopY + kNetTapeHeight = 358.
-            expect(
-              result.netCrossingY,
-              greaterThan(kNetTopY + kNetTapeHeight),
-              reason:
-                  'Near-net normal at ${angleDeg.toStringAsFixed(1)}° is '
-                  'expected to be a net fault (crossing y > ${kNetTopY + kNetTapeHeight}); '
-                  'actual netCrossingY=${result.netCrossingY.toStringAsFixed(1)}. '
-                  'If this fails the physics changed — re-evaluate option (a)/(b). '
-                  'Trajectory: $result',
-            );
-          }
-        },
-      );
-    });
-
-    // -----------------------------------------------------------------------
-    // 4. SMASH — jump contact (positive) and grounded contact (negative)
-    // -----------------------------------------------------------------------
-    group('4. Smash', () {
-      test(
-        'jump-smash speed stays within the velocity clamp',
-        () {
-          const jumpSmashSpeed = kSmashSpeed * kJumpSmashBonus;
-          expect(
-            jumpSmashSpeed,
-            lessThanOrEqualTo(kShuttleMaxVelocity),
-            reason:
-                'kSmashSpeed * kJumpSmashBonus ($jumpSmashSpeed) must not '
-                'exceed kShuttleMaxVelocity ($kShuttleMaxVelocity).',
-          );
-        },
-      );
-
-      test(
-        'from mid-court JUMP contact (450, 290) at both angle extremes: '
-        'crosses net above tape and lands in opponent half (preferably ≤ 1240)',
-        () {
-          // Launch position: x=450 (mid-court), y=290 (racquet at jump apex).
-          // kPlayerJumpApexY = 380 (feet), hitbox height 80 → top = 300,
-          // racquet reach 40 → contact y ≈ 260–290.  290 is a conservative
-          // (lower) estimate ensuring the test covers realistic geometry.
-          //
-          // Empirical (kSmashSpeed=16, kShuttleGravity=0.14, kShuttleDragCoefficient=0.001):
-          //   min angle (10°): land ≈ 1089, netCrossY ≈ 336 ✓
-          //   max angle (13°): land ≈ 1049, netCrossY ≈ 347 ✓
-          for (final angleDeg in [
-            _degOf(kSmashAngleMin),
-            _degOf(kSmashAngleMax),
-          ]) {
-            final result = TrajectoryHarness.runDownwardArc(
-              startX: 450,
-              startY: 290,
-              speed: kSmashSpeed,
-              angleDeg: angleDeg,
-              dragCoefficient: kShuttleDragCoefficient,
-            );
-
-            expect(
-              result.crossedNet,
-              isTrue,
-              reason:
-                  'Jump smash at ${angleDeg.toStringAsFixed(1)}° from '
-                  '(450, 290) must cross the net; trajectory: $result',
-            );
+            // With the lower net (470) from near-net height (480), the shuttle
+            // now clears cleanly — crossing y is well above the net top.
             expect(
               result.netCrossingY,
               lessThan(kNetTopY),
               reason:
-                  'Jump smash at ${angleDeg.toStringAsFixed(1)}° must cross '
-                  'the net ABOVE the tape (netCrossingY < $kNetTopY); '
-                  'actual=${result.netCrossingY.toStringAsFixed(1)}. '
-                  'Trajectory: $result',
-            );
-            expect(
-              result.landingX,
-              greaterThan(kNetX),
-              reason:
-                  'Jump smash at ${angleDeg.toStringAsFixed(1)}° must land '
-                  'in the opponent half (x > $kNetX); '
-                  'actual landingX=${result.landingX.toStringAsFixed(1)}. '
-                  'Trajectory: $result',
-            );
-            // Landing ≤ 1240 is preferred (both angle extremes achieve it at
-            // the current constants) but not a hard rule — a hard smash that
-            // sails slightly out is a player error, not a physics fault.
-            expect(
-              result.landingX,
-              lessThanOrEqualTo(kCourtRightBound),
-              reason:
-                  'Jump smash at ${angleDeg.toStringAsFixed(1)}° lands at '
-                  'x=${result.landingX.toStringAsFixed(1)}, which is beyond '
-                  '$kCourtRightBound. At the current constants both extremes '
-                  'land ≤ 1240; if this fails recheck kSmashAngleMax. '
-                  'Trajectory: $result',
-            );
-          }
-        },
-      );
-
-      test(
-        'NEGATIVE: grounded contact (450, 520) at both angle extremes: '
-        'crosses net BELOW the tape band — this is a net fault in real play',
-        () {
-          // Design intent: smashing a LOW shuttle from mid-court (waist height,
-          // y = 520) is a mistake.  The geometry is: start y = 520, net top
-          // y = 350, tape bottom y = 358.  A downward smash from this height
-          // does not have the vertical clearance to arc over the net; it hits
-          // the net body.  This test locks in that physical truth.
-          //
-          // Empirical (kSmashSpeed=16, kShuttleGravity=0.14):
-          //   min angle (10°): netCrossY ≈ 566 >> 358 ✓
-          //   max angle (13°): netCrossY ≈ 577 >> 358 ✓
-          for (final angleDeg in [
-            _degOf(kSmashAngleMin),
-            _degOf(kSmashAngleMax),
-          ]) {
-            final result = TrajectoryHarness.runDownwardArc(
-              startX: 450,
-              startY: 520,
-              speed: kSmashSpeed,
-              angleDeg: angleDeg,
-              dragCoefficient: kShuttleDragCoefficient,
-            );
-
-            expect(
-              result.crossedNet,
-              isTrue,
-              reason:
-                  'Grounded smash at ${angleDeg.toStringAsFixed(1)}° must '
-                  'at least reach the net plane; trajectory: $result',
-            );
-            // Crossing y > 358 means BELOW the tape bottom — a net fault.
-            expect(
-              result.netCrossingY,
-              greaterThan(kNetTopY + kNetTapeHeight),
-              reason:
-                  'Grounded smash at ${angleDeg.toStringAsFixed(1)}° from '
-                  '(450, 520) must be a net fault '
-                  '(netCrossingY > ${kNetTopY + kNetTapeHeight}); '
-                  'actual=${result.netCrossingY.toStringAsFixed(1)}. '
-                  'If this passes clean, a grounded smash unfairly escapes the '
-                  'net — recheck kSmashAngleMin or kShuttleGravity. '
+                  'Near-net normal at ${angleDeg.toStringAsFixed(1)}° must '
+                  'clear the new net top ($kNetTopY) — the lower net makes '
+                  'this a valid play now; '
+                  'actual netCrossingY=${result.netCrossingY.toStringAsFixed(1)}. '
                   'Trajectory: $result',
             );
           }
@@ -478,21 +342,18 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // 5. DROP SHOT
+    // 3. DROP SHOT
     // -----------------------------------------------------------------------
-    group('5. Drop shot from mid-court (450, 520)', () {
+    group('3. Drop shot from grounded drive contact (450, $kGroundedDriveY)', () {
+      // Empirical (kDropShotSpeed=9, kDropShotAngle=65°, kShuttleGravity=0.14):
+      //   from (450, 480): netCrossingY ≈ 304, landingX ≈ 786, 119 ticks.
+
       test(
         'crosses the net and lands SHORT (between net and short-serve line)',
         () {
-          // Drop shots use the same kShuttleDropShotDrag as normal flight
-          // (both = 0.001) at the new gravity (0.14).  The steeper fixed angle
-          // (65°, kDropShotAngle) and speed 9 produce a high arc that clears
-          // the net and drops inside the short-service zone without a separate
-          // elevated drag coefficient.  Empirical: land ≈ 778, netCrossY ≈ 342,
-          // 115 ticks.
           final result = TrajectoryHarness.runUpwardArc(
             startX: 450,
-            startY: 520,
+            startY: kGroundedDriveY,
             speed: kDropShotSpeed,
             angleDeg: _degOf(kDropShotAngle),
             dragCoefficient: kShuttleDropShotDrag,
@@ -536,11 +397,9 @@ void main() {
       test(
         'flight time ≤ $kDropMaxFlightTicks ticks (snappy-feel target)',
         () {
-          // Empirical: 115 ticks at kDropShotSpeed=9, kDropShotAngle=65°,
-          // kShuttleGravity=0.14.
           final result = TrajectoryHarness.runUpwardArc(
             startX: 450,
-            startY: 520,
+            startY: kGroundedDriveY,
             speed: kDropShotSpeed,
             angleDeg: _degOf(kDropShotAngle),
             dragCoefficient: kShuttleDropShotDrag,
@@ -560,9 +419,235 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // 6. Sanity invariants
+    // 4. SMASH — overhead GROUNDED contact (y ≈ 405, clears net by design)
     // -----------------------------------------------------------------------
-    group('6. Sanity invariants', () {
+    group(
+      '4. Smash OVERHEAD GROUNDED from (450, $kGroundedOverheadY) — '
+      'legal by design with new geometry',
+      () {
+        // Design intent (geometry-rebalance): with kNetTopY = 470 and the
+        // grounded reach-top = kGroundY − kPlayerHitboxHeight − kRacquetReach
+        // = 600 − 150 − 50 = 400, a grounded overhead smash launches from
+        // y ≈ 405, which is 65 units above the new net top (470). This is
+        // intentionally legal — grounded overhead smashes should clear the
+        // tape at the current angle range [10°, 15°].
+        //
+        // Empirical (kSmashSpeed=16, kShuttleGravity=0.14):
+        //   10°: netCrossingY ≈ 451, landingX ≈ 948 ✓
+        //   15°: netCrossingY ≈ 469, landingX ≈ 880 ✓ (just clears tape)
+        //
+        // The 15° max was chosen (vs old 13°) precisely because the grounded
+        // overhead position is now above the net — wider angles are valid.
+        // At 15.3° the crossing reaches 470.4 (clips the tape).
+
+        test(
+          'both angle extremes: clears the tape (crossing y < kNetTopY=$kNetTopY) '
+          'and lands in the opponent half',
+          () {
+            for (final angleDeg in [
+              _degOf(kSmashAngleMin),
+              _degOf(kSmashAngleMax),
+            ]) {
+              final result = TrajectoryHarness.runDownwardArc(
+                startX: 450,
+                startY: kGroundedOverheadY,
+                speed: kSmashSpeed,
+                angleDeg: angleDeg,
+                dragCoefficient: kShuttleDragCoefficient,
+              );
+
+              expect(
+                result.crossedNet,
+                isTrue,
+                reason:
+                    'Grounded overhead smash at ${angleDeg.toStringAsFixed(1)}° '
+                    'from (450, $kGroundedOverheadY) must cross the net; '
+                    'trajectory: $result',
+              );
+              expect(
+                result.netCrossingY,
+                lessThan(kNetTopY),
+                reason:
+                    'Grounded overhead smash at ${angleDeg.toStringAsFixed(1)}° '
+                    'must clear the tape (netCrossingY < $kNetTopY). '
+                    'This is LEGAL by design with the new geometry — contact '
+                    'y ($kGroundedOverheadY) is above the net top ($kNetTopY); '
+                    'actual=${result.netCrossingY.toStringAsFixed(1)}. '
+                    'Trajectory: $result',
+              );
+              expect(
+                result.landingX,
+                greaterThan(kNetX),
+                reason:
+                    'Grounded overhead smash at ${angleDeg.toStringAsFixed(1)}° '
+                    'must land past the net (x > $kNetX); '
+                    'actual landingX=${result.landingX.toStringAsFixed(1)}. '
+                    'Trajectory: $result',
+              );
+            }
+          },
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 5. SMASH — jump overhead contact (y ≈ 265, bigger margin and range)
+    // -----------------------------------------------------------------------
+    group(
+      '5. Smash JUMP overhead from (450, $kJumpOverheadY) — '
+      'clears with bigger margin and lands further than grounded version',
+      () {
+        // Launch position: x=450, y=265 (feet at jump apex 460, hitbox height
+        // 150 → hitbox top = 310, racquet reach 50 → contact y ≈ 260–310;
+        // 265 is a conservative realistic estimate).
+        //
+        // The jump-smash bonus multiplies speed: kSmashSpeed * kJumpSmashBonus
+        // = 16 * 1.15 = 18.4, within kShuttleMaxVelocity (20).
+        //
+        // Empirical (speed=16 grounded, speed=18.4 airborne):
+        //   grounded (450,405) 10°: netCrossingY ≈ 451, landingX ≈ 948
+        //   jump (450,265) 10°:     netCrossingY ≈ 311, landingX ≈ 1112 (further, bigger margin) ✓
+        //   jump (450,265) 10° +bonus: netCrossingY ≈ 308, landingX ≈ 1172 ✓
+
+        test(
+          'both angle extremes: clears the net and lands further than the '
+          'grounded version (jump smash has bigger margin and more range)',
+          () {
+            for (final angleDeg in [
+              _degOf(kSmashAngleMin),
+              _degOf(kSmashAngleMax),
+            ]) {
+              // Jump smash uses the jump-smash bonus speed.
+              const jumpSpeed = kSmashSpeed * kJumpSmashBonus;
+              final jumpResult = TrajectoryHarness.runDownwardArc(
+                startX: 450,
+                startY: kJumpOverheadY,
+                speed: jumpSpeed,
+                angleDeg: angleDeg,
+                dragCoefficient: kShuttleDragCoefficient,
+              );
+              final groundedResult = TrajectoryHarness.runDownwardArc(
+                startX: 450,
+                startY: kGroundedOverheadY,
+                speed: kSmashSpeed,
+                angleDeg: angleDeg,
+                dragCoefficient: kShuttleDragCoefficient,
+              );
+
+              expect(
+                jumpResult.crossedNet,
+                isTrue,
+                reason:
+                    'Jump smash at ${angleDeg.toStringAsFixed(1)}° must cross '
+                    'the net; trajectory: $jumpResult',
+              );
+              expect(
+                jumpResult.netCrossingY,
+                lessThan(kNetTopY),
+                reason:
+                    'Jump smash at ${angleDeg.toStringAsFixed(1)}° must clear '
+                    'the tape (netCrossingY < $kNetTopY); '
+                    'actual=${jumpResult.netCrossingY.toStringAsFixed(1)}. '
+                    'Trajectory: $jumpResult',
+              );
+
+              // Jump smash should cross higher (smaller netCrossingY) than
+              // the grounded version — it launches from much higher up.
+              expect(
+                jumpResult.netCrossingY,
+                lessThan(groundedResult.netCrossingY),
+                reason:
+                    'Jump smash at ${angleDeg.toStringAsFixed(1)}° must cross '
+                    'the net higher (smaller netCrossingY) than the grounded '
+                    'version (grounded=${groundedResult.netCrossingY.toStringAsFixed(1)}, '
+                    'jump=${jumpResult.netCrossingY.toStringAsFixed(1)}). '
+                    'Jump smash should give more margin. Trajectory: $jumpResult',
+              );
+
+              // Jump smash should land further (larger landingX) than grounded.
+              expect(
+                jumpResult.landingX,
+                greaterThan(groundedResult.landingX),
+                reason:
+                    'Jump smash at ${angleDeg.toStringAsFixed(1)}° must land '
+                    'further than the grounded version '
+                    '(grounded=${groundedResult.landingX.toStringAsFixed(1)}, '
+                    'jump=${jumpResult.landingX.toStringAsFixed(1)}). '
+                    'Trajectory: $jumpResult',
+              );
+
+              expect(
+                jumpResult.landingX,
+                lessThanOrEqualTo(kCourtRightBound),
+                reason:
+                    'Jump smash at ${angleDeg.toStringAsFixed(1)}° must land '
+                    'in bounds (x ≤ $kCourtRightBound); '
+                    'actual=${jumpResult.landingX.toStringAsFixed(1)}. '
+                    'Trajectory: $jumpResult',
+              );
+            }
+          },
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 6. NEGATIVE: smash from LOW contact (y ≈ 560) — net fault
+    // -----------------------------------------------------------------------
+    group('6. Smash from LOW grounded contact (450, 560) — net fault', () {
+      // Design intent: taking the shuttle low (y = 560, well below the net
+      // top at 470) and smashing remains a mistake with the new geometry.
+      // The shuttle launches at a downward angle from a position that is
+      // 90 units below the net top — it cannot arc over the net cleanly and
+      // either falls short of the net or clears the tape only below it.
+      //
+      // Empirical (kSmashSpeed=16, kShuttleGravity=0.14):
+      //   10°: lands at x ≈ 619 (never reaches net plane at x = 640) → fault.
+      //   15°: lands at x ≈ 600 → fault.
+      //
+      // The shuttle does NOT cross the net plane at all — it hits the ground
+      // on the hitter's own side. This is a fault (ground hit before net).
+      test(
+        'at both angle extremes: shuttle does NOT reach the net — '
+        'net fault (lands on own side)',
+        () {
+          for (final angleDeg in [
+            _degOf(kSmashAngleMin),
+            _degOf(kSmashAngleMax),
+          ]) {
+            final result = TrajectoryHarness.runDownwardArc(
+              startX: 450,
+              startY: 560,
+              speed: kSmashSpeed,
+              angleDeg: angleDeg,
+              dragCoefficient: kShuttleDragCoefficient,
+            );
+
+            // The shuttle must NOT cross the net — or if it somehow does,
+            // it must land on the hitter's own side (x ≤ kNetX).
+            // Either outcome is a fault (taking the shuttle low and smashing).
+            final isFault = !result.crossedNet || result.landingX <= kNetX;
+            expect(
+              isFault,
+              isTrue,
+              reason:
+                  'Smash from low contact (450, 560) at '
+                  '${angleDeg.toStringAsFixed(1)}° must be a fault '
+                  "(shuttle must not cross the net, or must land on hitter's "
+                  'side). Taking the shuttle low and smashing is a mistake. '
+                  'actual crossedNet=${result.crossedNet}, '
+                  'landingX=${result.landingX.toStringAsFixed(1)}. '
+                  'Trajectory: $result',
+            );
+          }
+        },
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // 7. Sanity invariants
+    // -----------------------------------------------------------------------
+    group('7. Sanity invariants', () {
       test('smash is the fastest shot and stays within the velocity clamp', () {
         expect(kSmashSpeed, greaterThan(kNormalShotSpeed));
         expect(kSmashSpeed, greaterThan(kDropShotSpeed));
@@ -570,13 +655,13 @@ void main() {
         expect(
           kSmashSpeed * kJumpSmashBonus,
           lessThanOrEqualTo(kShuttleMaxVelocity),
+          reason:
+              'Jump-smash speed (${kSmashSpeed * kJumpSmashBonus}) must not '
+              'exceed kShuttleMaxVelocity ($kShuttleMaxVelocity).',
         );
       });
 
       test('gravity is at least 0.10 (anti-floatiness guard)', () {
-        // Gravity below 0.10 was measured to produce 3+ second rally shots
-        // (177–198 ticks) that feel like slow motion in arcade play.
-        // This assertion prevents a well-intentioned but regressive retune.
         expect(
           kShuttleGravity,
           greaterThanOrEqualTo(0.10),
@@ -586,13 +671,24 @@ void main() {
               'See M1-032a retune for measurement details.',
         );
       });
+
+      test('jump-smash speed stays within the velocity clamp', () {
+        const jumpSmashSpeed = kSmashSpeed * kJumpSmashBonus;
+        expect(
+          jumpSmashSpeed,
+          lessThanOrEqualTo(kShuttleMaxVelocity),
+          reason:
+              'kSmashSpeed * kJumpSmashBonus ($jumpSmashSpeed) must not '
+              'exceed kShuttleMaxVelocity ($kShuttleMaxVelocity).',
+        );
+      });
     });
   });
 
   // -------------------------------------------------------------------------
   // Part C — End-to-end serve integration test
   // -------------------------------------------------------------------------
-  group('Part C — End-to-end serve integration (M1-032a)', () {
+  group('Part C — End-to-end serve integration (geometry-rebalance)', () {
     test(
       'left player tosses: shuttle crosses the net plane and lands in '
       'the right half (GroundHit.side == CourtSide.right)',
@@ -612,17 +708,14 @@ void main() {
           reason: 'After toss, FSM must enter inPlay.',
         );
 
-        // Verify the shuttle has rightward (+x) velocity — it's heading toward
-        // the right half.
+        // Verify the shuttle has rightward (+x) velocity.
         expect(
           sim.state.shuttle.velocity.x.toDouble(),
           greaterThan(0),
           reason: 'Left-server toss must impart rightward velocity.',
         );
 
-        // Run up to 300 ticks (5 seconds at 60 Hz) with no further input.
-        // At the retuned constants the serve takes ≈ 117 ticks to land; 300
-        // gives generous headroom.  Track whether the shuttle crossed the net.
+        // Run up to 300 ticks with no further input. Track crossing and landing.
         var crossedNet = false;
         GroundHit? landing;
 
@@ -639,9 +732,7 @@ void main() {
         expect(
           crossedNet,
           isTrue,
-          reason:
-              'Serve must cross the net plane '
-              '(shuttle x > $kNetX) during rally.',
+          reason: 'Serve must cross the net plane (shuttle x > $kNetX).',
         );
 
         expect(
@@ -650,30 +741,20 @@ void main() {
           reason: 'GroundHit must fire within 300 ticks of the toss.',
         );
 
-        // The new constants deliver a serve that clears the net and lands in
-        // the right half — so the RECEIVER (right) is awarded the point via
-        // groundedIn (opponent of the side it lands on, which is right).
-        // Actually: the serve now DOES reach the right half (landing.side ==
-        // CourtSide.right), so the LEFT player wins the point (the shuttle
-        // landed on the right side => right player loses the point).
-        // Alternatively: the serve may be called short-serve fault if it's in
-        // the zone 640-840 (receiver wins), or land beyond 840 (server wins).
-        // Either way the shuttle MUST land in the right half.
         expect(
           landing!.side,
           CourtSide.right,
           reason:
-              'With the new constants the serve travels into the right half '
-              '— GroundHit.side must be CourtSide.right. '
-              'LandingX was: ${landing!.landingX.toDouble().toStringAsFixed(1)}',
+              'Serve travels into the right half — GroundHit.side must be '
+              'CourtSide.right. LandingX was: '
+              '${landing!.landingX.toDouble().toStringAsFixed(1)}',
         );
 
-        // The point must be scored (not a timeout or LET).
         expect(
           sim.state.fsm.lastPointReason,
           anyOf(PointReason.groundedIn, PointReason.shortServeFault),
           reason:
-              'The serve should end in a scored point, not a timeout. '
+              'The serve should end in a scored point. '
               'Reason: ${sim.state.fsm.lastPointReason}',
         );
       },
@@ -681,46 +762,41 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // Documented trade-off note (kept as a test comment, no assertion)
+  // Documented trade-off note (geometry-rebalance)
   // -------------------------------------------------------------------------
   //
-  // CONSTRAINT TRADE-OFF (M1-032a retune — kShuttleGravity, kNormalShotSpeed,
-  //   kTossSpeed, kDropShotSpeed, kDropShotAngle, kSmashAngleMax):
+  // GEOMETRY-REBALANCE CHANGES (constants changed):
+  //   kPlayerHitboxHeight:   80  → 150
+  //   kPlayerHitboxWidth:    48  → 60
+  //   kNetTopY:             350  → 470  (net = 130 u ≈ 87% of player height)
+  //   kRacquetReach:         40  → 50
+  //   kPlayerJumpApexY:     380  → 460  (jump height = 140 u)
+  //   kServeShuttleOffsetX:  40  → 50
+  //   kServeShuttleHeight:   80  → 110  (waist height of 150-u player)
+  //   kSmashAngleMax:        13° → 15°  (grounded overhead now above net top)
   //
-  // MEASURED PROBLEM (pre-retune constants: gravity=0.06, normal speed=8):
-  //   Serve:  190 ticks (3.2 s)  — slow-motion
-  //   Normal: 177–198 ticks (3.0 s) — slow-motion
-  //   Drop:   176 ticks (2.9 s)  — slow-motion
+  // SHOT CONSTANTS UNCHANGED (re-verified empirically):
+  //   kShuttleGravity = 0.14, kShuttleDragCoefficient = 0.001
+  //   kShuttleDropShotDrag = 0.001 (no separate drop drag needed)
+  //   kNormalShotSpeed = 12, kNormalShotAngleMin = 45°, kNormalShotAngleMax = 55°
+  //   kSmashSpeed = 16, kSmashAngleMin = 10°
+  //   kDropShotSpeed = 9, kDropShotAngle = 65°
+  //   kTossSpeed = 13, kTossAngle = 43°
   //
-  // SOLUTION:
-  //   Raise kShuttleGravity from 0.06 → 0.14 (primary lever on flight time).
-  //   Re-derive launch speeds so every shot still clears the net:
-  //     - kNormalShotSpeed: 8 → 12 (needed at g=0.14 to clear net from y=520)
-  //     - kTossSpeed:       9 → 13 (same reason, serve start x=200 y=520)
-  //     - kTossAngle:       45° → 43° (slightly shallower for landing range)
-  //     - kDropShotSpeed:   7 → 9  (needed at g=0.14 and 65° to clear net)
-  //     - kDropShotAngle:   60° → 65° (steeper compensates for short distance)
-  //     - kShuttleDropShotDrag: 0.002 → 0.001 (drop uses normal drag; stronger
-  //       gravity + steep angle provide sufficient landing-zone control)
-  //     - kSmashAngleMax:   25° → 13° (geometry: from correct jump contact y=290
-  //       at g=0.14, angles > 13° produce net-body hits; old test from y=480
-  //       was physically wrong — 130 units below the net top)
+  // EMPIRICAL RESULTS WITH NEW GEOMETRY:
+  //   Serve (210, 490):  netCrossY ≈ 307, land ≈ 925, 120 ticks ≤ 135 ✓
+  //   Normal 45° (300, 480): netCrossY ≈ 299, land ≈ 954, 119 ticks ≤ 135 ✓
+  //   Normal 55° (300, 480): netCrossY ≈ 249, land ≈ 886, 132 ticks ≤ 135 ✓
+  //   Drop 65° (450, 480):   netCrossY ≈ 304, land ≈ 786, 119 ticks ≤ 120 ✓
+  //   Smash grounded overhead (450,405) 10°: netCrossY ≈ 451 < 470 ✓
+  //   Smash grounded overhead (450,405) 15°: netCrossY ≈ 469 < 470 ✓ (legal)
+  //   Smash jump (450,265) 10° +bonus:       netCrossY ≈ 308, land ≈ 1172 ✓
+  //   Smash jump (450,265) 15° +bonus:       netCrossY ≈ 326, land ≈ 1094 ✓
+  //   Smash low (450,560): never reaches net (lands at x ≈ 619) → fault ✓
   //
-  // ACHIEVED TARGETS:
-  //   Serve:  117 ticks (1.95 s) ≤ 135 ✓
-  //   Normal: 114–128 ticks (1.9–2.1 s) ≤ 135 ✓
-  //   Drop:   115 ticks (1.92 s) ≤ 120 ✓
-  //
-  // NEAR-NET NORMAL (option b, intentional):
-  //   From (560, 520) at 45°: net crossing y ≈ 447 → net fault.
-  //   From (560, 520) at 55°: net crossing y ≈ 417 → net fault.
-  //   REASON: 80 horizontal units is not enough run-up at g=0.14/speed=12 to
-  //   arc a shuttle 170 vertical units over the net.  This is CORRECT badminton
-  //   physics — a waist-height shot at the net is a net-cord error.
-  //
-  // SMASH GEOMETRY FIX:
-  //   Old test (450, 480): launch 130 u below net top — physically incoherent.
-  //   New test (450, 290): racquet reach at jump apex (feet y=380, hitbox 80,
-  //   racquet reach 40 → y ≈ 260–290).  At g=0.14 angles [10°,13°] clear;
-  //   14° just clips the tape.  Grounded (450, 520) → always net fault ✓.
+  // NEAR-NET NORMAL BEHAVIOUR CHANGE:
+  //   Old (net top 350): from (560,520) at 45-55° → net fault (y > 358).
+  //   New (net top 470): from (560,480) at 45-55° → clean pass (y ≈ 377-407).
+  //   The lower net makes clearing from near-net legal — correct badminton
+  //   physics: the player is 10 units above the net top, not 170 units below.
 }

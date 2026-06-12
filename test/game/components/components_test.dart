@@ -125,7 +125,8 @@ void main() {
       game.onRemove();
     });
 
-    test('PlayerComponent hitbox is 48×80 with feet anchoring', () async {
+    test('PlayerComponent hitbox is 60×150 with feet anchoring', () async {
+      // Geometry-rebalance: hitbox width 48→60, height 80→150.
       final game = await buildGame();
       game.update(0); // no-op tick, just check initial state
 
@@ -134,11 +135,11 @@ void main() {
           .firstWhere((p) => p.side == CourtSide.left);
 
       final lv = game.view.leftPlayer;
-      // Width: position.x to position.x + kPlayerHitboxWidth spans 48 units.
+      // Width: position.x to position.x + kPlayerHitboxWidth spans 60 units.
       const hitboxWidth = kPlayerHitboxWidth;
       const hitboxHeight = kPlayerHitboxHeight;
-      expect(hitboxWidth, 48, reason: 'hitbox width must be 48 game units');
-      expect(hitboxHeight, 80, reason: 'hitbox height must be 80 game units');
+      expect(hitboxWidth, 60, reason: 'hitbox width must be 60 game units');
+      expect(hitboxHeight, 150, reason: 'hitbox height must be 150 game units');
 
       // Verify feet anchoring: position.y + hitboxHeight == feetY.
       final feetYFromComponent = leftPlayer.position.y + kPlayerHitboxHeight;

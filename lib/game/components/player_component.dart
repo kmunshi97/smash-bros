@@ -27,54 +27,59 @@ import 'package:smash_bros/game/palette.dart';
 // Tick-order position: rendered after CourtComponent, before ShuttleComponent.
 // ---------------------------------------------------------------------------
 
+// Geometry-rebalance: all proportions sized for the 150-unit-tall, 60-wide
+// hitbox. The big-head look puts the head at ~53% of total height (the
+// reference style is roughly head-half, body-half).
+
 // Head geometry (game units).
-const double _kHeadDiameter = 52;
+const double _kHeadDiameter = 80;
 const double _kHeadRadius = _kHeadDiameter / 2;
-// Head centre is at feetY − _kHeadCentreFromFeet units above feet.
-const double _kHeadCentreFromFeet = 54;
+// Head centre is at feetY − _kHeadCentreFromFeet units above feet. The head
+// occupies the top of the hitbox: top of head = 110 + 40 = 150 = hitbox top.
+const double _kHeadCentreFromFeet = 110;
 
 // Headband geometry.
-const double _kHeadbandH = 9;
-const double _kHeadbandOffsetFromHeadCentre = 6; // y offset from head centre
+const double _kHeadbandH = 14;
+const double _kHeadbandOffsetFromHeadCentre = 10; // y offset from head centre
 
 // Eye geometry.
-const double _kEyeRadius = 7;
-const double _kPupilRadius = 4.5;
-const double _kEyeOffsetX = 10; // half-distance between the two eyes
-const double _kEyeOffsetY = 4; // upward offset from head centre
+const double _kEyeRadius = 10;
+const double _kPupilRadius = 6;
+const double _kEyeOffsetX = 15; // half-distance between the two eyes
+const double _kEyeOffsetY = 6; // upward offset from head centre
 
 // Torso geometry.
-const double _kTorsoW = 30;
-const double _kTorsoH = 22;
-// Torso top = head bottom.
+const double _kTorsoW = 40;
+const double _kTorsoH = 60;
+// Torso top = head bottom (feetY − 70).
 const double _kTorsoTopFromFeet = _kHeadCentreFromFeet - _kHeadRadius;
 
 // Shoe geometry.
-const double _kShoeW = 18;
-const double _kShoeH = 8;
+const double _kShoeW = 24;
+const double _kShoeH = 10;
 
-// Racquet geometry — oval + handle on the facing side.
-const double _kRacquetOvalW = 14;
-const double _kRacquetOvalH = 20;
-const double _kRacquetHandleW = 3;
-const double _kRacquetFromFeet = 40; // vertical position above feet
+// Racquet geometry — oval + handle on the facing side, at shoulder height.
+const double _kRacquetOvalW = 20;
+const double _kRacquetOvalH = 30;
+const double _kRacquetHandleW = 4;
+const double _kRacquetFromFeet = 85; // vertical position above feet
 
 // Dizzy star geometry (stun effect).
-const double _kStarRadius = 5;
+const double _kStarRadius = 7;
 const int _kStarCount = 3;
-const double _kStarOrbitRadius = 22;
-const double _kStarOrbitOffsetY = 14; // above head centre
+const double _kStarOrbitRadius = 30;
+const double _kStarOrbitOffsetY = 20; // above head centre
 
 /// Renders one player avatar as a cartoon big-head character.
 ///
 /// Responsibilities (pure presentation — no game logic):
 ///  * Each [update] reads the matching [PlayerView] from [BadmintonGame.view]
-///    and sets [position] so the hitbox rect (48 x 80) is anchored at the
-///    player's feet (top-left = (x - 24, feetY - 80)).
+///    and sets [position] so the hitbox rect (60 x 150) is anchored at the
+///    player's feet (top-left = (x - 30, feetY - 150)).
 ///  * [render] draws the cartoon character within (approximately within) the
-///    hitbox. The large head may overflow the hitbox by up to ~15% (≈4 units
-///    on each side of the 48-unit width), which is within the allowed overflow
-///    in the PR spec.
+///    hitbox. The big head (80-unit diameter on a 60-unit-wide hitbox)
+///    deliberately overflows ~10 units per side — purely cosmetic; collision
+///    uses the engine hitbox, never the drawing.
 ///  * When [PlayerView.isStunned], a stun-flash blinks every 8 render frames
 ///    AND 3 dizzy stars arc above the head.
 ///  * Racquet flips with [PlayerView.facing] so the contact-zone side is
@@ -128,14 +133,14 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
 
   /// Current position of this component in game-unit world space.
   ///
-  /// Top-left of the hitbox rect: (x - 24, feetY - 80).
+  /// Top-left of the hitbox rect: (x - 30, feetY - 150).
   Vector2 position = Vector2.zero();
 
   @override
   void update(double dt) {
     final pv = _playerViewFromGame();
     _playerView = pv;
-    // Anchor: top-left of the 48×80 hitbox.
+    // Anchor: top-left of the 60×150 hitbox.
     position = Vector2(
       pv.x - kPlayerHitboxWidth / 2,
       pv.feetY - kPlayerHitboxHeight,
