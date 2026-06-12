@@ -8,6 +8,7 @@
 /// reads (see CLAUDE.md "Architecture rules").
 library;
 
+export 'ai/ai.dart';
 export 'constants.dart';
 export 'entities/entities.dart';
 export 'input/input.dart';

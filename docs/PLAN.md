@@ -13,10 +13,10 @@ todos:
     status: pending
   - id: milestone-1b
     content: "Milestone 1B: Flame Rendering [S] -- BadmintonGame shell (1280x720 letterboxed), RenderState, Court/Player/Shuttle components, touch controls + safe-area/notch + multi-touch, basic HUD"
-    status: pending
+    status: completed
   - id: milestone-1c
-    content: "Milestone 1C: Basic AI + Integration [S] -- AIController interface (deterministic, PRNG from GameState), BasicAI, playable match vs AI"
-    status: pending
+    content: "Milestone 1C: Basic AI + Integration [S] -- AIController interface (deterministic, private AI PRNG for rollback-stream safety), BasicAI, playable match vs AI"
+    status: completed
   - id: milestone-2a
     content: "Milestone 2A: Visual Polish [S] -- sprite animations, parallax, camera + screen shake, particles, animation state machine, haptics"
     status: pending
@@ -212,7 +212,7 @@ Implementation tasks:
 
 ### 1C -- Basic AI
 
-- **M1-027** `[S]`: `AIController` interface — deterministic, randomness only via `GameState.random`.
+- **M1-027** `[S]`: `AIController` interface — deterministic, randomness via a private `GameRandom` owned by the AI (NOT `GameState.random` — the AI's draws must not touch the tick-owned PRNG stream; rollback replays recorded inputs, not the AI, so the stream must be bit-identical on re-execution).
 - **M1-028** `[S]`: `BasicAI` — 15-frame reaction delay, 70/20/10 shot mix.
 - **M1-029** `[S]`: Wire into playable match, tap-to-restart.
 
