@@ -80,4 +80,10 @@ abstract final class GamePalette {
   ///
   /// Components multiply this base opacity by `(1 - age/24)` per segment.
   static const Color shuttleTrail = Color(0x66FFFFFF); // white @ 40% alpha
+
+  // -- Controls ---------------------------------------------------------------
+
+  /// Accent colour for the context-sensitive serve (TOSS) button — gold, so
+  /// the serve affordance reads as distinct from the rally actions.
+  static const Color serveAccent = Color(0xFFFFD700);
 }
