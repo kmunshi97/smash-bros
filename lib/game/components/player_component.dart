@@ -16,7 +16,7 @@ import 'package:smash_bros/game/palette.dart';
 //
 // Draws one player (left or right side) as a cartoon "big-head" character:
 //   • Drop shadow ellipse at kGroundY, fading as the player rises (depth cue).
-//   • Large head circle (≈52 diameter) centred near the top of the hitbox,
+//   • Large head circle (80 diameter) centred near the top of the hitbox,
 //     with skin tone, eyes (white + pupil), and a coloured headband strip.
 //   • Short rounded torso (team colour) below the head.
 //   • Two shoe ellipses at the feet (dark).
