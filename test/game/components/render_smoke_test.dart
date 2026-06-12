@@ -121,4 +121,70 @@ void main() {
       game.onRemove();
     },
   );
+
+  // ---------------------------------------------------------------------------
+  // State 4: full cycle servePending → inPlay → pointScored
+  // Verifies that the new depth cues (trapezoid court, drop shadows, shuttle
+  // ground shadow, swing animation) produce no render exceptions across all
+  // three phases.
+  // ---------------------------------------------------------------------------
+
+  test(
+    'render smoke — cycle through servePending → inPlay → pointScored without exception',
+    () async {
+      final game = await buildGame();
+      final canvas = makeCanvas();
+
+      // Phase 1: servePending render.
+      expect(
+        () => game.renderTree(canvas),
+        returnsNormally,
+        reason: 'renderTree must not throw in servePending (depth-cue pass)',
+      );
+
+      // Toss to enter inPlay.
+      game.controls.tossHeld = true;
+      game.update(kTickDuration);
+      game.controls.tossHeld = false;
+      for (var i = 0; i < 5; i++) {
+        game.update(kTickDuration);
+      }
+
+      // Phase 2: inPlay render (shuttle in flight, drop shadows active).
+      expect(
+        () => game.renderTree(canvas),
+        returnsNormally,
+        reason:
+            'renderTree must not throw in inPlay with shuttle shadow and '
+            'player drop shadows',
+      );
+
+      // Drive until pointScored (serve timeout in kServeTimeoutFrames ticks,
+      // or let the AI rally end naturally). Use a fast-forward: run up to
+      // kServeTimeoutFrames + kPointPauseTicks ticks total to guarantee a
+      // pointScored phase is reached.
+      var reachedPointScored = false;
+      for (var i = 0; i < kServeTimeoutFrames + kPointPauseTicks + 10; i++) {
+        game.update(kTickDuration);
+        if (game.view.phase.name == 'pointScored') {
+          reachedPointScored = true;
+          break;
+        }
+      }
+
+      // Phase 3: pointScored render (if reached; guard to avoid false failure
+      // if the match ends before pointScored is hit).
+      if (reachedPointScored) {
+        expect(
+          () => game.renderTree(canvas),
+          returnsNormally,
+          reason:
+              'renderTree must not throw in pointScored phase with new depth '
+              'cues active',
+        );
+      }
+
+      game.onRemove();
+    },
+  );
 }

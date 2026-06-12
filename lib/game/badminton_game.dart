@@ -33,9 +33,24 @@ import 'package:smash_bros/game/input/local_control_state.dart';
 /// ## Component contract
 ///
 /// All Flame components must read [view] for positional data. They must
-/// **never** touch the simulation or its `GameState` directly. One-off events
-/// (sound, VFX) must be consumed via [takeEvents]; events are guaranteed to
-/// arrive exactly once per tick regardless of the display rate.
+/// **never** touch the simulation or its `GameState` directly.
+///
+/// ## Event contract
+///
+/// Events (sound, VFX, animation triggers) are delivered via two surfaces:
+///
+/// * [frameEvents] — the stable per-frame event list. It is rebuilt once per
+///   [update] call: all events produced by ticks that fired this render frame
+///   are moved into `_frameEvents`, replacing the previous frame's contents.
+///   Components read [frameEvents] during their own `update()` calls (which
+///   run after [BadmintonGame.update]); the list is stable for the entire
+///   render frame and never double-delivers across frames.
+///
+/// * [takeEvents] — retained for compatibility with M2 audio consumers.
+///   Returns the same list as [frameEvents]; audio consumers in M2 will call
+///   [frameEvents] directly. Either accessor delivers events exactly once per
+///   simulation tick regardless of the display rate — reading `view.events`
+///   instead would replay them each render frame.
 ///
 /// ## Keyboard (desktop dev target)
 ///
@@ -124,8 +139,10 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   // Cached interpolated view, recomputed once per render frame in [update].
   late RenderState _view;
 
-  // Events accumulated from captured snapshots since the last [takeEvents].
+  // Events accumulated from ticks fired this render frame.
+  // Populated once per update() and stable until the next update().
   final List<RenderEvent> _pendingEvents = [];
+  List<RenderEvent> _frameEvents = const [];
 
   // Current safe-area insets in game units (updated by GameScreen each frame).
   EdgeInsets _safeArea = EdgeInsets.zero;
@@ -212,6 +229,14 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   void update(double dt) {
     super.update(dt);
     _driver.advance(dt);
+    // Move all events produced by ticks that fired this render frame into the
+    // stable _frameEvents list (replacing last frame's contents). Components
+    // read frameEvents in their own update() calls; the list is stable for the
+    // full render frame and never double-delivers across frames.
+    _frameEvents = _pendingEvents.isEmpty
+        ? const []
+        : List<RenderEvent>.unmodifiable(_pendingEvents.toList());
+    _pendingEvents.clear();
     // Recompute the cached view once per render frame (after advancing the
     // driver so alpha is current for this frame's interpolation point).
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
@@ -247,18 +272,27 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     }
   }
 
-  /// Returns all [RenderEvent]s accumulated since the last call and clears the
-  /// pending queue.
+  /// All [RenderEvent]s produced by simulation ticks that fired this render
+  /// frame.
   ///
-  /// Audio and VFX consumers must call this exactly once per render frame.
-  /// Events are guaranteed to arrive once per simulation tick regardless of the
-  /// display rate — using `view.events` would replay them each render frame.
-  List<RenderEvent> takeEvents() {
-    if (_pendingEvents.isEmpty) return const [];
-    final copy = List<RenderEvent>.unmodifiable(_pendingEvents);
-    _pendingEvents.clear();
-    return copy;
-  }
+  /// Populated once per [update] call and stable for the entire render frame:
+  /// components that read [frameEvents] in their own `update()` receive
+  /// exactly one delivery per tick regardless of the display rate. The list
+  /// is replaced (not mutated) on each [update]; holding a reference across
+  /// frames is safe but will observe stale events.
+  ///
+  /// Audio consumers in M2 will read [frameEvents] directly. [takeEvents] is
+  /// retained for compatibility and returns the same list.
+  List<RenderEvent> get frameEvents => _frameEvents;
+
+  /// Returns all [RenderEvent]s for this render frame.
+  ///
+  /// Retained for compatibility. Returns [frameEvents] — the same stable list
+  /// built once per [update]. Audio consumers in M2 should prefer [frameEvents]
+  /// directly (same data, no aliasing concern). Events are guaranteed to arrive
+  /// once per simulation tick regardless of the display rate — reading
+  /// `view.events` instead would replay them each render frame.
+  List<RenderEvent> takeEvents() => _frameEvents;
 
   /// Restarts the match with fresh seeds, resetting the simulation and AI.
   ///
@@ -283,6 +317,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     _previous = _current;
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
     _pendingEvents.clear();
+    _frameEvents = const [];
   }
 
   // -- Keyboard input (macOS desktop feel-tuning target) ---------------------
