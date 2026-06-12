@@ -69,10 +69,12 @@ void main() {
     () async {
       final game = await buildGame();
 
-      // Advance past servePending by pressing toss.
-      game.controls.pressToss();
+      // Advance past servePending by tossing (M1-034 hold+release pattern).
+      game.controls.tossHeld = true;
+      game.update(kTickDuration); // tick 1: charge
+      game.controls.tossHeld = false;
       for (var i = 0; i < 5; i++) {
-        game.update(kTickDuration);
+        game.update(kTickDuration); // tick 2: launch; ticks 3-6: in flight
       }
 
       // Phase should now be inPlay; the shuttle is in flight and the trail

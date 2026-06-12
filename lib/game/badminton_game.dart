@@ -46,11 +46,11 @@ import 'package:smash_bros/game/input/local_control_state.dart';
 /// Key mapping:
 ///   ←/A            → moveLeft hold
 ///   →/D            → moveRight hold
+///   T              → tossHeld hold (hold to charge, release to serve)
 ///   Space          → jump
 ///   J              → smash
 ///   K              → drop shot
 ///   L              → normal shot
-///   T              → serve toss
 class BadmintonGame extends FlameGame with KeyboardEvents {
   /// Creates a game with a deterministic [seed], the given [firstServer], and
   /// a match played to [targetScore].
@@ -315,6 +315,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   /// Extracted as a named method so unit tests can call it directly without
   /// constructing raw [KeyEvent] objects.
   bool handleKeyChange(LogicalKeyboardKey key, {required bool isDown}) {
+    // -- Level-triggered holds (set on down, clear on up) --------------------
     if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) {
       controls.moveLeft = isDown;
       return true;
@@ -324,6 +325,13 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       controls.moveRight = isDown;
       return true;
     }
+    // T is now level-triggered (hold to charge, release to serve — M1-034).
+    if (key == LogicalKeyboardKey.keyT) {
+      controls.tossHeld = isDown;
+      return true;
+    }
+
+    // -- Edge-triggered one-shots (only fire on key-down) --------------------
     if (isDown) {
       if (key == LogicalKeyboardKey.space) {
         controls.pressJump();
@@ -339,10 +347,6 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       }
       if (key == LogicalKeyboardKey.keyL) {
         controls.pressNormal();
-        return true;
-      }
-      if (key == LogicalKeyboardKey.keyT) {
-        controls.pressToss();
         return true;
       }
     }

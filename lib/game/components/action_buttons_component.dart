@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/painting.dart';
@@ -45,15 +47,28 @@ const double _kEdgeMargin = 12;
 const double _kOutlineWidth = 3;
 
 /// A single circular action button with the new Head-Ball-style look.
+///
+/// The optional `onHold`/`onRelease` callbacks promote a button to
+/// press-and-hold semantics (used by the TOSS slot for the charge-serve).
+/// When `onHold` is supplied, `onPress` is ignored — down fires `onHold` and
+/// up/cancel fires `onRelease`. The `chargeProvider` callback, if set, is
+/// called during render to get the current charge fraction `[0,1]`; a non-zero
+/// value draws a gold radial ring around the button proportional to the charge.
 class _ActionButton extends PositionComponent with TapCallbacks {
   _ActionButton({
     required String label,
     required void Function() onPress,
     required Color color,
     required Vector2 position,
+    void Function()? onHold,
+    void Function()? onRelease,
+    double Function()? chargeProvider,
   }) : _label = label,
        _onPress = onPress,
        _color = color,
+       _onHold = onHold,
+       _onRelease = onRelease,
+       _chargeProvider = chargeProvider,
        super(
          position: position,
          size: Vector2.all(_kButtonDiameter),
@@ -62,6 +77,9 @@ class _ActionButton extends PositionComponent with TapCallbacks {
   String _label;
   void Function() _onPress;
   Color _color;
+  void Function()? _onHold;
+  void Function()? _onRelease;
+  double Function()? _chargeProvider;
   bool _pressed = false;
 
   static final TextPaint _textPaint = TextPaint(
@@ -78,30 +96,45 @@ class _ActionButton extends PositionComponent with TapCallbacks {
     ..strokeWidth = _kOutlineWidth;
 
   /// Updates the button's label, action, and colour (used by the serve slot).
+  ///
+  /// [onHold] / [onRelease] / [chargeProvider] may be null to downgrade back
+  /// to one-shot semantics (e.g. when the slot flips from TOSS → SMASH).
   void reconfigure({
     required String label,
     required void Function() onPress,
     required Color color,
+    void Function()? onHold,
+    void Function()? onRelease,
+    double Function()? chargeProvider,
   }) {
     _label = label;
     _onPress = onPress;
     _color = color;
+    _onHold = onHold;
+    _onRelease = onRelease;
+    _chargeProvider = chargeProvider;
   }
 
   @override
   void onTapDown(TapDownEvent event) {
     _pressed = true;
-    _onPress();
+    if (_onHold != null) {
+      _onHold!();
+    } else {
+      _onPress();
+    }
   }
 
   @override
   void onTapUp(TapUpEvent event) {
     _pressed = false;
+    _onRelease?.call();
   }
 
   @override
   void onTapCancel(TapCancelEvent event) {
     _pressed = false;
+    _onRelease?.call();
   }
 
   @override
@@ -142,7 +175,29 @@ class _ActionButton extends PositionComponent with TapCallbacks {
       _outlinePaint,
     );
 
-    // 4. Label text.
+    // 4. Charge arc — radial ring fill proportional to charge fraction.
+    //    Drawn above the outline so it is clearly visible. Only rendered when
+    //    charge > 0 (i.e. during servePending with the button held).
+    final charge = _chargeProvider?.call() ?? 0.0;
+    if (charge > 0.0) {
+      const ringWidth = 6.0;
+      const ringRadius = _kButtonRadius - _kOutlineWidth - ringWidth / 2;
+      final arcPaint = Paint()
+        ..color = GamePalette.serveAccent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = ringWidth
+        ..strokeCap = StrokeCap.round;
+      // Arc starts at top (−π/2) and sweeps clockwise by charge * 2π.
+      canvas.drawArc(
+        Rect.fromCircle(center: centre, radius: ringRadius),
+        -math.pi / 2, // start at 12 o'clock
+        charge * 2 * math.pi, // sweep
+        false,
+        arcPaint,
+      );
+    }
+
+    // 5. Label text.
     _textPaint.render(
       canvas,
       _label,
@@ -211,6 +266,9 @@ class ActionButtonsComponent extends Component
     _loaded = true;
   }
 
+  // Whether the primary slot is currently showing TOSS (tracked to detect flips).
+  bool _slotIsToss = false;
+
   @override
   void update(double dt) {
     if (!_loaded) return;
@@ -226,13 +284,23 @@ class ActionButtonsComponent extends Component
     final isServingLeft =
         view.phase == MatchPhase.servePending && view.server == CourtSide.left;
 
-    if (isServingLeft) {
+    if (isServingLeft && !_slotIsToss) {
+      // Slot flipping TO toss — wire hold/release semantics + charge meter.
+      _slotIsToss = true;
       _primaryButton.reconfigure(
         label: 'TOSS',
-        onPress: game.controls.pressToss,
+        onPress: () {}, // unused: onHold takes over
         color: GamePalette.serveAccent,
+        onHold: () => game.controls.tossHeld = true,
+        onRelease: () => game.controls.tossHeld = false,
+        chargeProvider: () => game.view.serveCharge,
       );
-    } else {
+    } else if (!isServingLeft && _slotIsToss) {
+      // Slot flipping AWAY from toss — clear any stale hold and downgrade to
+      // one-shot smash. Without this, a finger still down during the serve
+      // launch would leave tossHeld = true and bleed into the next tick.
+      _slotIsToss = false;
+      game.controls.tossHeld = false;
       _primaryButton.reconfigure(
         label: 'SMASH',
         onPress: game.controls.pressSmash,

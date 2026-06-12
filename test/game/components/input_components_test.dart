@@ -108,19 +108,18 @@ void main() {
         game.update(kTickDuration);
 
         // Verify by pressing toss and checking it is scheduled.
-        // The component calls game.controls.pressToss() on tap — we can't
-        // simulate a tap in unit tests, but we can verify the serve-slot logic
-        // by inspecting that after a toss pressed via controls, it clears the
-        // phase.
-        game.controls.pressToss();
-        game.update(kTickDuration);
+        // M1-034: toss is level-triggered. Hold one tick then release to launch.
+        game.controls.tossHeld = true;
+        game.update(kTickDuration); // tick: charge accumulates
+        game.controls.tossHeld = false;
+        game.update(kTickDuration); // tick: release → serve launches
 
         // A successful toss should move the phase out of servePending.
         expect(
           game.view.phase,
           isNot(MatchPhase.servePending),
           reason:
-              'toss during servePending (left server) must advance the phase',
+              'hold-toss during servePending (left server) must advance the phase',
         );
         game.onRemove();
       },
@@ -129,9 +128,11 @@ void main() {
     test('after toss inPlay phase, serve slot would show SMASH', () async {
       final game = await buildGame();
 
-      // Advance past servePending by tossing.
-      game.controls.pressToss();
-      game.update(kTickDuration);
+      // Advance past servePending by tossing (M1-034 hold+release pattern).
+      game.controls.tossHeld = true;
+      game.update(kTickDuration); // charge
+      game.controls.tossHeld = false;
+      game.update(kTickDuration); // launch
 
       // Phase should now be inPlay (toss connected).
       // If it's still servePending, the toss may not have connected for this
