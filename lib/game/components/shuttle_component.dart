@@ -73,6 +73,31 @@ class ShuttleComponent extends Component with HasGameReference<BadmintonGame> {
 
   @override
   void render(Canvas canvas) {
+    final v = game.view;
+
+    // 0. Ground shadow — only during inPlay (landing-spot depth cue).
+    //    A small dark ellipse at (shuttle.x, kGroundY); size and opacity scale
+    //    with height above the ground: shadow is largest/darkest when the
+    //    shuttle is near the ground, smallest/faintest when high up.
+    if (v.phase == MatchPhase.inPlay) {
+      final heightAboveGround = (kGroundY - _position.y).clamp(0.0, 400.0);
+      final shadowFraction = (heightAboveGround / 400.0).clamp(0.0, 1.0);
+      // Shadow opacity: 0.5 when on the ground, 0.05 when at max height.
+      final shadowAlpha = 0.05 + (1.0 - shadowFraction) * 0.45;
+      final shadowW = 16.0 + (1.0 - shadowFraction) * 8.0;
+      final shadowH = 6.0 + (1.0 - shadowFraction) * 4.0;
+      final shadowPaint = Paint()
+        ..color = const Color(0xFF000000).withValues(alpha: shadowAlpha);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(_position.x, kGroundY - shadowH / 2),
+          width: shadowW,
+          height: shadowH,
+        ),
+        shadowPaint,
+      );
+    }
+
     // 1. Trail — drawn oldest-to-newest so newer segments paint over older.
     //    We iterate in reverse (oldest first) for correct layering.
     final trailList = _trail.toList();
