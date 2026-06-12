@@ -8,7 +8,7 @@ import 'package:smash_bros/engine/systems/collision_system.dart';
 const _court = Court();
 
 // Court constants (from constants.dart), restated for hand-computed expectations:
-//   netX = 640, netTopY = 350, tapeHeight = 8, tapeBottom = 358,
+//   netX = 640, netTopY = 470, tapeHeight = 8, tapeBottom = 478,
 //   groundY = 600, leftBound = 40, rightBound = 1240.
 
 /// Builds a shuttle whose sweep this tick is [from] -> [to], with [velocity]
@@ -26,7 +26,7 @@ void main() {
     test('fast smash tunnels through the net body in one tick → NetBodyHit', () {
       // Sweep from left of the net to right of it, ~20 units/tick, crossing
       // the net plane well below the tape band. Neither endpoint touches netX.
-      // From (630, 500) to (650, 500): crosses x=640 at t=0.5, y=500 (>358).
+      // From (630, 500) to (650, 500): crosses x=640 at t=0.5, y=500 (>478).
       final s = _swept(_v(630, 500), _v(650, 500), velocity: _v(20, 0));
       final events = CollisionSystem.resolve(s, _court);
 
@@ -38,9 +38,9 @@ void main() {
     });
 
     test('crossing above the net top → no event, shuttle untouched', () {
-      // Crosses x=640 at y=300 (< netTopY 350): clean passage.
-      final from = _v(630, 300);
-      final to = _v(650, 300);
+      // Crosses x=640 at y=400 (< netTopY 470): clean passage.
+      final from = _v(630, 400);
+      final to = _v(650, 400);
       final s = _swept(from, to, velocity: _v(20, 0));
       final events = CollisionSystem.resolve(s, _court);
 
@@ -50,29 +50,31 @@ void main() {
     });
 
     test('crossing within the tape band → NetCordHit, velocity halved', () {
-      // Crosses x=640 at y=355 (within [350, 358]).
-      final to = _v(650, 355);
-      final s = _swept(_v(630, 355), to, velocity: _v(20, 4));
+      // Crosses x=640 at y=474 (within [470, 478]).
+      final to = _v(650, 474);
+      final s = _swept(_v(630, 474), to, velocity: _v(20, 4));
       final events = CollisionSystem.resolve(s, _court);
 
       expect(events, hasLength(1));
       expect(events.single, isA<NetCordHit>());
       final hit = events.single as NetCordHit;
       expect(hit.crossing.x.toDouble(), 640);
-      expect(hit.crossing.y.toDouble(), 355);
+      expect(hit.crossing.y.toDouble(), 474);
       // Velocity damped by 0.5; position continues to the integrated point.
       expect(s.velocity, _v(10, 2));
       expect(s.position, to);
     });
 
     test('tape boundary at netTopY is a cord hit (inclusive lower edge)', () {
-      final s = _swept(_v(630, 350), _v(650, 350), velocity: _v(20, 0));
+      // y=470 is the tape lower edge (kNetTopY).
+      final s = _swept(_v(630, 470), _v(650, 470), velocity: _v(20, 0));
       final events = CollisionSystem.resolve(s, _court);
       expect(events.single, isA<NetCordHit>());
     });
 
     test('tape boundary at netTopY+tapeHeight is a cord hit (inclusive)', () {
-      final s = _swept(_v(630, 358), _v(650, 358), velocity: _v(20, 0));
+      // y=478 is the tape upper edge (kNetTopY + kNetTapeHeight = 470 + 8).
+      final s = _swept(_v(630, 478), _v(650, 478), velocity: _v(20, 0));
       final events = CollisionSystem.resolve(s, _court);
       expect(events.single, isA<NetCordHit>());
     });
@@ -145,45 +147,26 @@ void main() {
 
   group('CollisionSystem combined sweeps', () {
     test('tape graze then ground in the same tick → both events in t-order', () {
-      // Crosses net at x=640: choose geometry so the net crossing (within the
-      // tape band) happens before the ground crossing.
-      // From (600, 354) to (680, 604). d = (80, 250).
-      //   netT = (640 - 600) / 80 = 0.5, crossing y = 354 + 0.5*250 = 479.
-      // That y is below the tape, so widen: use a shallow descent.
-      // From (600, 350) to (680, 610). d = (80, 260).
-      //   netT = (640-600)/80 = 0.5 → y = 350 + 0.5*260 = 480 (net-body, no good)
-      // Need the net crossing y in [350,358] AND a later ground crossing.
-      // Put the net crossing early in the sweep:
-      // From (635, 354) to (760, 620). d = (125, 266).
-      //   netT = (640-635)/125 = 0.04 → y = 354 + 0.04*266 = 364.64 (>358, body)
-      // Make the descent gentle near the net, so crossing y stays in band:
-      // From (635, 351) to (660, 620). d = (25, 269).
-      //   netT = (640-635)/25 = 0.2 → y = 351 + 0.2*269 = 404.8 (>358, body)
-      // The tape band is thin; to graze it the sweep must cross x=640 while
-      // y is in [350,358]. Use a fast horizontal-ish crossing then a long
-      // drop afterwards:
-      // From (636, 352) to (644, 612). d = (8, 260).
-      //   netT = (640-636)/8 = 0.5 → y = 352 + 0.5*260 = 482 (body again).
-      // The issue: at netT the y is mid-sweep. To keep y small at the crossing
-      // we must cross x near the START of the sweep. Start just left of net:
-      // From (639, 352) to (655, 612). d = (16, 260).
-      //   netT = (640-639)/16 = 0.0625 → y = 352 + 0.0625*260 = 368.25 (body).
-      // Net top is at 350; to keep crossing y <= 358 with a 260-unit drop, the
-      // crossing must be at t <= (358-352)/260 ≈ 0.023. Start essentially on
-      // the plane:
-      // From (639.7, 352) to (655, 612). d = (15.3, 260).
-      //   netT = (640-639.7)/15.3 = 0.0196 → y = 352 + 0.0196*260 = 357.1 (cord!)
-      //   ground: groundY=600, t=(600-352)/260 = 0.9538, landingX = 639.7 +
-      //     0.9538*15.3 = 654.3.
-      final s = _swept(_v(639.7, 352), _v(655, 612), velocity: _v(15.3, 260));
+      // Crosses net at x=640: geometry ensures the net crossing is within the
+      // tape band [470, 478] and the ground crossing happens later.
+      //
+      // Approach: start just left of the net (x=639.7), at y=472 (in the tape
+      // band), with a gentle rightward + heavy downward velocity so that:
+      //   netT = (640 - 639.7) / 15.3 ≈ 0.0196
+      //   netY = 472 + 0.0196 * 130 ≈ 474.5  (inside [470, 478]) → cord hit ✓
+      //   groundT = (600 - 472) / 130 ≈ 0.985
+      //   landingX = 639.7 + 0.985 * 15.3 ≈ 654.8
+      //
+      // Both events fire in one tick; the cord hit is reported first (smaller t).
+      final s = _swept(_v(639.7, 472), _v(655, 602), velocity: _v(15.3, 130));
       final events = CollisionSystem.resolve(s, _court);
 
       expect(events, hasLength(2));
       expect(events[0], isA<NetCordHit>());
       expect(events[1], isA<GroundHit>());
-      // Net-cord crossing y is within the tape band.
+      // Net-cord crossing y is within the tape band [470, 478].
       final cord = events[0] as NetCordHit;
-      expect(cord.crossing.y.toDouble(), inInclusiveRange(350, 358));
+      expect(cord.crossing.y.toDouble(), inInclusiveRange(470, 478));
       // Ground response wins the final position (clamped to ground).
       expect(s.position.y.toDouble(), 600);
       expect(s.velocity, FixVec2.zero);
@@ -263,8 +246,9 @@ void main() {
     });
 
     test('determinism: two identical shuttles resolved twice match', () {
-      final a = _swept(_v(639.7, 352), _v(655, 612), velocity: _v(15.3, 260));
-      final b = _swept(_v(639.7, 352), _v(655, 612), velocity: _v(15.3, 260));
+      // Use the same tape-graze geometry as the combined-sweeps test.
+      final a = _swept(_v(639.7, 472), _v(655, 602), velocity: _v(15.3, 130));
+      final b = _swept(_v(639.7, 472), _v(655, 602), velocity: _v(15.3, 130));
       final ea = CollisionSystem.resolve(a, _court);
       final eb = CollisionSystem.resolve(b, _court);
       expect(ea, eb);

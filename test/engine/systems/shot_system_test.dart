@@ -12,13 +12,13 @@ import 'package:smash_bros/engine/systems/shot_system.dart';
 
 const _court = Court();
 
-// Geometry recap (constants.dart): hitbox width 48 (half 24), height 80,
-// groundY 600, racquetReach 40, netX 640.
+// Geometry recap (constants.dart): hitbox width 60 (half 30), height 150,
+// groundY 600, racquetReach 50, netX 640.
 //
 // A grounded left-side player centred at x=300 facing right has:
-//   hitboxLeft   = 276, hitboxRight  = 324
-//   hitboxTop    = 520, hitboxBottom = 600
-// Expanded (facing right, upward): x in [276, 364], y in [480, 600].
+//   hitboxLeft   = 270, hitboxRight  = 330
+//   hitboxTop    = 450, hitboxBottom = 600
+// Expanded (facing right, upward): x in [270, 380], y in [400, 600].
 
 Player _leftPlayer({double x = 300, Facing facing = Facing.right}) =>
     Player(x: Fix.of(x), courtSide: CourtSide.left, facing: facing);
@@ -30,7 +30,7 @@ Shuttle _shuttleAt(double x, double y) =>
     Shuttle(position: FixVec2(Fix.of(x), Fix.of(y)));
 
 /// A shuttle inside the reach box of [_leftPlayer] (centred at x=300, facing
-/// right): x=320 (within [276, 364]), y=560 (within [480, 600]).
+/// right): x=320 (within [270, 380]), y=560 (within [400, 600]).
 Shuttle _inReachLeft() => _shuttleAt(320, 560);
 
 GameRandom _rng() => GameRandom(12345);
@@ -67,7 +67,8 @@ void main() {
     });
 
     test('in-range shuttle connects for a left-facing right player', () {
-      // Right player centred at x=980 facing left: x in [916, 1004], y[480,600].
+      // Right player centred at x=980 facing left: x in [900, 1010], y[400,600].
+      // (hitboxLeft=950, hitboxRight=1010, reach extends left: 950-50=900).
       // Shuttle at x=940, y=560 is within reach (extends leftward).
       final result = ShotSystem.trySwing(
         player: _rightPlayer(),
@@ -82,7 +83,7 @@ void main() {
 
     test('shuttle behind the back whiffs (right-facing player)', () {
       // Facing right, reach extends rightward only. A shuttle to the left of
-      // hitboxLeft (276) is behind the body. x=250 < 276 → whiff.
+      // hitboxLeft (270) is behind the body. x=250 < 270 → whiff.
       final result = ShotSystem.trySwing(
         player: _leftPlayer(),
         shuttle: _shuttleAt(250, 560),
@@ -96,7 +97,7 @@ void main() {
 
     test('shuttle behind the back whiffs (left-facing player)', () {
       // Facing left, reach extends leftward only. A shuttle to the right of
-      // hitboxRight (1004) is behind the body. x=1030 > 1004 → whiff.
+      // hitboxRight (1010) is behind the body. x=1030 > 1010 → whiff.
       final result = ShotSystem.trySwing(
         player: _rightPlayer(),
         shuttle: _shuttleAt(1030, 560),
@@ -109,10 +110,10 @@ void main() {
     });
 
     test('above-head shuttle within the upward reach connects', () {
-      // y top of hitbox is 520; reach extends it up to 480. y=490 connects.
+      // hitboxTop = 450; upward reach extends to 400. y=420 is within reach.
       final result = ShotSystem.trySwing(
         player: _leftPlayer(),
-        shuttle: _shuttleAt(320, 490),
+        shuttle: _shuttleAt(320, 420),
         rally: RallyState(),
         shotType: ShotType.normal,
         random: _rng(),
@@ -135,10 +136,11 @@ void main() {
     });
 
     test('beyond the racquet reach whiffs', () {
-      // Facing right, reach edge is 364. x=370 > 364.
+      // Facing right, reach edge = hitboxRight + racquetReach = 330 + 50 = 380.
+      // x=390 > 380 → whiff.
       final result = ShotSystem.trySwing(
         player: _leftPlayer(),
-        shuttle: _shuttleAt(370, 560),
+        shuttle: _shuttleAt(390, 560),
         rally: RallyState(),
         shotType: ShotType.normal,
         random: _rng(),
@@ -276,14 +278,15 @@ void main() {
 
   group('ShotSystem jump smash', () {
     test('airborne smash speed is smashSpeed * jumpSmashBonus', () {
-      // At jumpTick 20 of 40 (apex) the feet rise to y=380, so the hitbox is
-      // [276, 364] x [300, 380] expanded up to y=260. Place the shuttle there.
+      // At jumpTick 20 of 40 (apex) the feet rise to y=460 (kPlayerJumpApexY),
+      // so the hitbox top = 460 - 150 = 310, reach extends up to y = 310 - 50
+      // = 260. Place the shuttle within that reach.
       final airborne = _leftPlayer()..jumpTick = 20; // mid-jump, not grounded
       expect(airborne.isGrounded, isFalse);
 
       final result = ShotSystem.trySwing(
         player: airborne,
-        shuttle: _shuttleAt(320, 350),
+        shuttle: _shuttleAt(320, 280),
         rally: RallyState(),
         shotType: ShotType.smash,
         random: _rng(),
@@ -362,7 +365,7 @@ void main() {
       final before = random.state;
       ShotSystem.trySwing(
         player: _leftPlayer(),
-        shuttle: _shuttleAt(370, 560), // beyond reach
+        shuttle: _shuttleAt(390, 560), // beyond reach (reach edge = 330+50=380)
         rally: RallyState(),
         shotType: ShotType.normal,
         random: random,

@@ -25,7 +25,15 @@ const double kNetX = kCourtWidth / 2;
 
 /// Y coordinate of the top of the net (smaller y is higher on screen, so this
 /// sits above the ground).
-const double kNetTopY = 350;
+///
+/// Rebalanced (geometry-rebalance): 350 → 470. The old net (350) stood 250
+/// units tall vs an 80-unit player — 3× the player height. Real badminton's
+/// net (1.55 m) is ≈ 85% of player height. At kPlayerHitboxHeight = 150 the
+/// net height = kGroundY − kNetTopY = 600 − 470 = 130 units, which is 130/150
+/// ≈ 87% — close to the real ratio. The lower net makes clearing EASIER, so
+/// shot speeds and angle ranges were re-verified against the new geometry; see
+/// kSmashAngleMax for the only angle constant that changed.
+const double kNetTopY = 470;
 
 /// Height of the net-cord band (the tape) below the net top.
 ///
@@ -57,7 +65,13 @@ const double kShortServeLineRight = kNetX + 200;
 const double kPlayerSpeed = 6;
 
 /// Y coordinate of the jump apex (the feet's highest point).
-const double kPlayerJumpApexY = 380;
+///
+/// Rebalanced (geometry-rebalance): 380 → 460. With kPlayerHitboxHeight = 150
+/// the jump height = kGroundY − kPlayerJumpApexY = 600 − 460 = 140 units.
+/// A grounded overhead contact at y ≈ 400 (hitbox top 450 − reach 50) already
+/// clears the net top (470) without jumping; jumps are used for high
+/// interceptions and to gain steeper smash angles.
+const double kPlayerJumpApexY = 460;
 
 /// Peak jump height above the ground, in game units.
 const double kPlayerJumpHeight = kGroundY - kPlayerJumpApexY;
@@ -66,10 +80,21 @@ const double kPlayerJumpHeight = kGroundY - kPlayerJumpApexY;
 const int kPlayerJumpDuration = 40;
 
 /// Player hitbox width in game units.
-const double kPlayerHitboxWidth = 48;
+///
+/// Rebalanced (geometry-rebalance): 48 → 60. Wider hitbox matches the taller
+/// player proportionally and gives a slightly larger reach zone. Clamping
+/// margins (kPlayer1StartX = kCourtLeftBound + 120 = 160; half-width = 30;
+/// left outer bound = 40) still leave 90 units between the start position and
+/// the outer wall — well within legal play.
+const double kPlayerHitboxWidth = 60;
 
 /// Player hitbox height in game units.
-const double kPlayerHitboxHeight = 80;
+///
+/// Rebalanced (geometry-rebalance): 80 → 150. Taller players improve
+/// proportion vs the new net height (kNetTopY = 470; net = 130 units ≈ 87%
+/// of player height, matching real badminton's ≈ 85%). The game-layer
+/// PlayerComponent drawing is re-proportioned to match; see player_component.dart.
+const double kPlayerHitboxHeight = 150;
 
 /// Starting x of player 1 (left side).
 const double kPlayer1StartX = kCourtLeftBound + 120;
@@ -79,15 +104,29 @@ const double kPlayer2StartX = kCourtRightBound - 120;
 
 /// Horizontal offset from the server's centre toward the net at which the
 /// shuttle is placed for a serve.
-const double kServeShuttleOffsetX = 40;
+///
+/// Rebalanced (geometry-rebalance): 40 → 50. Scales with the wider hitbox
+/// (60) so the shuttle is still placed slightly in front of the body.
+const double kServeShuttleOffsetX = 50;
 
 /// Height above the ground at which the serve shuttle is placed.
-const double kServeShuttleHeight = 80;
+///
+/// Rebalanced (geometry-rebalance): 80 → 110. Represents waist height of
+/// the taller 150-unit player (roughly y = kGroundY − kServeShuttleHeight =
+/// 600 − 110 = 490, which is near the mid-body of a 150-unit hitbox whose
+/// top sits at kGroundY − kPlayerHitboxHeight = 600 − 150 = 450).
+const double kServeShuttleHeight = 110;
 
 /// Extra horizontal and vertical reach the racquet adds to the player hitbox
 /// on the facing side (and upward), in game units. Models the racquet arm
 /// extending the effective contact zone in front of and above the body.
-const double kRacquetReach = 40;
+///
+/// Rebalanced (geometry-rebalance): 40 → 50. Scales with the taller player;
+/// the upward reach now extends from hitbox top (y = kGroundY −
+/// kPlayerHitboxHeight = 450) to y = 450 − 50 = 400, which is well above the
+/// new net top (470). Grounded overhead contact (y ≈ 405) is therefore just
+/// inside the upward reach zone without jumping.
+const double kRacquetReach = 50;
 
 /// Speed multiplier applied to a smash hit while the player is airborne — the
 /// genre-defining jump smash hits harder than a grounded smash.
@@ -101,31 +140,25 @@ const double kJumpSmashBonus = 1.15;
 ///
 /// Tuned (M1-032a) from 0.15 → 0.06 to make shots physically reachable.
 /// Retuned (M1-032a retune) from 0.06 → 0.14 to eliminate floatiness.
-/// At 0.06 every shot took 3+ seconds in the air (177–198 ticks for a normal
-/// clear), feeling like slow motion for an arcade title.  At 0.14 flight times
-/// drop to 114–128 ticks for normals (1.9–2.1 s) and 117 ticks for serves
-/// (≈ 2.0 s), which is snappy but still followable on screen.
-/// Higher launch speeds compensate so every shot still crosses the net.
+/// Unchanged at 0.14 through the geometry-rebalance. At 0.14, flight times
+/// are 119–132 ticks for normals (2.0–2.2 s) and 120 ticks for serves with
+/// the new geometry — snappy and followable.
 const double kShuttleGravity = 0.14;
 
 /// Quadratic-drag coefficient for normal flight.
 ///
-/// Unchanged at 0.001 through both tuning passes (M1-032a and retune).  The
-/// value is low enough that high-speed shots (clears, smashes) retain their
-/// range and cross to the opponent half without stalling, while gravity at
-/// 0.14 provides the primary landing-speed control.
+/// Unchanged at 0.001 through all tuning passes. Unchanged through the
+/// geometry-rebalance: high-speed shots retain their range across the court,
+/// and gravity at 0.14 remains the primary landing-zone control.
 const double kShuttleDragCoefficient = 0.001;
 
 /// Quadratic-drag coefficient for drop shots (higher, bleeds speed faster).
 ///
 /// Retuned (M1-032a retune) from 0.002 → 0.001 (same as normal flight).
-/// At the new gravity (0.14) and steeper drop angle (65°) the shuttle already
-/// lands short — between the net and the short-service line (640–840) — using
-/// the same drag as a normal shot.  The higher angle is now the primary
-/// differentiator of the drop shot's short-range character; a separate drag
-/// coefficient is no longer needed and would overly dampen the shot under the
-/// stronger gravity.  See empirical result: drop from (450, 520) at 65°/9
-/// units/tick lands at x ≈ 778 — inside the 840 short-service line.
+/// Unchanged through the geometry-rebalance. From the new contact height
+/// (450, 480), the 65° steep angle still delivers the shuttle inside the
+/// short-service line (x ≈ 786 ≤ 840); the separate elevated drag is not
+/// needed.
 const double kShuttleDropShotDrag = 0.001;
 
 /// Maximum shuttle speed in game units per tick (stability safeguard).
@@ -146,27 +179,28 @@ const double kNetCordDamping = 0.5;
 
 /// Launch speed of a normal clear/drive shot.
 ///
-/// Retuned (M1-032a retune) from 8 → 12 game-units/tick.  At the new
-/// gravity (0.14), the original speed of 8 produced net-crossing y values of
-/// ~475–515 — hitting the net body.  Speed 12 at the 45°–55° angle range
-/// produces net-crossing y values of 286–338, well above the net top (350),
-/// and lands 875–938 from the defensive position (300, 520) in ≤ 128 ticks.
+/// Retuned (M1-032a retune) from 8 → 12 game-units/tick.
+/// Unchanged at 12 through the geometry-rebalance: from the new grounded
+/// drive contact y = 480 (hitbox top 450, waist ≈ 480), speed 12 at 45–55°
+/// produces net-crossing y values of 249–299, well above the new net top
+/// (470), and lands 886–954 from the defensive position (300, 480) in
+/// 119–132 ticks (≤ 135 target).
 const double kNormalShotSpeed = 12;
 
 /// Minimum launch angle of a normal shot, in radians.
 ///
-/// Unchanged at 45° through the retune (M1-032a retune).  At 45° with
-/// speed 12 and gravity 0.14, a defensive shot from (300, 520) crosses the
-/// net at y ≈ 338 (above the 350 net top) and lands at x ≈ 938 in 114 ticks.
-/// See test/engine/balance/ for the near-net scenario note.
+/// Unchanged at 45° through both retunes (M1-032a retune and
+/// geometry-rebalance). At 45° with speed 12 and gravity 0.14, a defensive
+/// shot from the new grounded-drive contact (300, 480) crosses the net at
+/// y ≈ 299 (well above the new net top 470) and lands at x ≈ 954 in 119 ticks.
 const double kNormalShotAngleMin = 45 * (pi / 180);
 
 /// Maximum launch angle of a normal shot, in radians.
 ///
-/// Unchanged at 55° through the retune (M1-032a retune).  At 55° with
-/// speed 12 and gravity 0.14, a defensive shot from (300, 520) crosses the
-/// net at y ≈ 286 and lands at x ≈ 875 in 128 ticks — within bounds and
-/// well below the ≤ 135 tick flight-time target.
+/// Unchanged at 55° through both retunes (M1-032a retune and
+/// geometry-rebalance). At 55° with speed 12 and gravity 0.14, a defensive
+/// shot from (300, 480) crosses the net at y ≈ 249 and lands at x ≈ 886 in
+/// 132 ticks — well within the ≤ 135 tick target.
 const double kNormalShotAngleMax = 55 * (pi / 180);
 
 /// Launch speed of a smash.
@@ -177,59 +211,65 @@ const double kSmashSpeed = 16;
 
 /// Minimum launch angle of a smash, in radians.
 ///
-/// Unchanged at 10°.  From the corrected jump-contact position (450, 290)
-/// at gravity 0.14, the smash at 10° crosses the net at y ≈ 336 (above the
-/// net top at 350) and lands at x ≈ 1089 — in bounds and in opponent half.
+/// Unchanged at 10° through all retunes. From the grounded-overhead contact
+/// (450, 405) at gravity 0.14, the smash at 10° crosses the net at y ≈ 451
+/// (above the new net top at 470) and lands at x ≈ 948 — in bounds and in
+/// the opponent half. From the jump-overhead contact (450, 265) the margin
+/// is larger: net crossing y ≈ 311.
 const double kSmashAngleMin = 10 * (pi / 180);
 
 /// Maximum launch angle of a smash, in radians.
 ///
-/// Retuned (M1-032a retune) from 25° → 13°.  The previous test scenario
-/// launched from (450, 480) — 130 units below the net top — which was
-/// physically incoherent for a jump smash; a real jump-smash contact is at
-/// racquet height ≈ y 260–290.  With the corrected launch position (450, 290)
-/// and gravity 0.14, the maximum angle at which the shuttle still clears the
-/// net (crossing y < 350) is 13°; at 14° the crossing y = 350.4 hits the
-/// tape.  The tighter range [10°, 13°] matches the narrow downward window of
-/// a genuine hard smash and makes smash direction more predictable/readable
-/// for players — wide angle spreads are the province of drops and clears.
-const double kSmashAngleMax = 13 * (pi / 180);
+/// Retuned (M1-032a retune) from 25° → 13°.
+/// Re-retuned (geometry-rebalance) from 13° → 15°.
+///
+/// The lower net top (kNetTopY 470 vs old 350) opens more vertical angle
+/// for a smash from grounded-overhead contact (y ≈ 405). At 15° the shuttle
+/// crosses the net at y ≈ 469.2 (< 470 net top — just clears the tape);
+/// at 15.3° the crossing reaches 470.4, hitting the tape. The range [10°,15°]
+/// is still narrow, preserving the readable "hard downward shot" character,
+/// and now allows both a grounded-overhead smash (from y ≈ 405) AND a
+/// jump-overhead smash (from y ≈ 265) to clear the net cleanly. A smash from
+/// a LOW contact (y ≈ 560, below the net top) still fails to reach the
+/// opponent's court — empirically landing at x ≈ 619 (short of the net at
+/// x = 640). See the balance tests for all empirical numbers.
+const double kSmashAngleMax = 15 * (pi / 180);
 
 /// Launch speed of a drop shot.
 ///
-/// Retuned (M1-032a retune) from 7 → 9 game-units/tick.  At gravity 0.14
-/// the original speed of 7 at 65° produced a net crossing y ≈ 479 — below
-/// the net body.  Speed 9 at 65° produces crossing y ≈ 342 (above the
-/// 350 net top) and lands at x ≈ 778, inside the short-service line at 840,
-/// in 115 ticks (≤ the 120-tick flight-time target).
+/// Retuned (M1-032a retune) from 7 → 9 game-units/tick.
+/// Unchanged at 9 through the geometry-rebalance: from the new grounded-drive
+/// contact (450, 480) at 65° and gravity 0.14, speed 9 produces net-crossing
+/// y ≈ 304 (above the new net top 470) and lands at x ≈ 786, inside the
+/// short-service line at 840, in 119 ticks (≤ the 120-tick target).
 const double kDropShotSpeed = 9;
 
 /// Launch angle of a drop shot, in radians.
 ///
-/// Retuned (M1-032a retune) from 60° → 65°.  At gravity 0.14 and speed 9,
-/// 65° provides the minimum vertical impulse needed to arc the shuttle over
-/// the net (from y = 520 to net top y = 350, a 170-unit rise over 190 units
-/// of horizontal distance).  The steeper angle keeps the landing short while
-/// the unified drag coefficient (kShuttleDropShotDrag = 0.001) is sufficient
-/// — no separate elevated drag is required under the stronger gravity.
+/// Retuned (M1-032a retune) from 60° → 65°.
+/// Unchanged at 65° through the geometry-rebalance. From the new contact
+/// height (480 vs old 520), a 65° arc needs only a modest rise to clear the
+/// lower net top (470 vs old 350). The net crossing margin is large: y ≈ 304,
+/// 166 units above the tape. The landing zone (x ≈ 786) remains inside the
+/// short-service line (840), preserving the drop shot's tactical distinctness.
 const double kDropShotAngle = 65 * (pi / 180);
 
 /// Launch speed of a serve toss.
 ///
-/// Retuned (M1-032a retune) from 9 → 13 game-units/tick.  At gravity 0.14
-/// the original speed of 9 at 45° produced a net crossing y ≈ 577 — hitting
-/// the net body.  Speed 13 at 43° crosses the net at y ≈ 338 (above the 340
-/// threshold, well above the 350 net top) and lands at x ≈ 904, past the
-/// short-service line (840) and inside the baseline (1240), in 117 ticks
-/// (≤ the 135-tick flight-time target).
+/// Retuned (M1-032a retune) from 9 → 13 game-units/tick.
+/// Unchanged at 13 through the geometry-rebalance. From the new serve start
+/// position (kPlayer1StartX + kServeShuttleOffsetX, kGroundY − kServeShuttleHeight)
+/// = (210, 490), speed 13 at 43° crosses the new net top (470) at y ≈ 307
+/// (163 units of clearance) and lands at x ≈ 925, past the short-service
+/// line (840) and inside the baseline (1240), in 120 ticks (≤ 135 target).
 const double kTossSpeed = 13;
 
 /// Launch angle of a serve toss, in radians.
 ///
-/// Retuned (M1-032a retune) from 45° → 43°.  Slightly shallower than 45°
-/// increases horizontal range while gravity 0.14 keeps the arc tight enough
-/// to clear the net above the 340 clearance threshold.  The toss has no PRNG
-/// spread (fixed angle), so a single trajectory determines compliance.
+/// Retuned (M1-032a retune) from 45° → 43°.
+/// Unchanged at 43° through the geometry-rebalance. From the new serve height
+/// (y = 490 vs old 520), the 43° arc gives 163 units of clearance above the
+/// new net top (470) — ample margin while keeping the landing in bounds.
 const double kTossAngle = 43 * (pi / 180);
 
 // ---------------------------------------------------------------------------

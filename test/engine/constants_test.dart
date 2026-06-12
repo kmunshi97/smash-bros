@@ -14,7 +14,10 @@ void main() {
     });
 
     test('jump apex clears the net top', () {
-      expect(kPlayerJumpApexY, greaterThan(kNetTopY));
+      // kPlayerJumpApexY is the feet y-coordinate at the jump peak.
+      // In screen coordinates (+y downward), a smaller y means higher on screen.
+      // The jump apex must be ABOVE the net top: apex y < net top y.
+      expect(kPlayerJumpApexY, lessThan(kNetTopY));
     });
   });
 
