@@ -8,6 +8,7 @@ import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
 import 'package:smash_bros/engine/sim/fixed_timestep_driver.dart';
 import 'package:smash_bros/engine/sim/simulation.dart';
+import 'package:smash_bros/game/components/components.dart';
 
 /// The Flame game host for Arcade Badminton (M1-020).
 ///
@@ -64,6 +65,9 @@ class BadmintonGame extends FlameGame {
   late RenderState _previous;
   late RenderState _current;
 
+  // Cached interpolated view, recomputed once per render frame in [update].
+  late RenderState _view;
+
   // Events accumulated from captured snapshots since the last [takeEvents].
   final List<RenderEvent> _pendingEvents = [];
 
@@ -84,6 +88,8 @@ class BadmintonGame extends FlameGame {
     _simulation.start();
     _current = RenderState.capture(_simulation);
     _previous = _current;
+    // Cache the initial view so [view] is ready before the first update().
+    _view = RenderState.lerp(_previous, _current, _driver.alpha);
 
     // -- Debug scaffolding (remove in M1-026) ----------------------------------
     // FpsTextComponent shows the current frame rate in the top-left corner.
@@ -98,21 +104,43 @@ class BadmintonGame extends FlameGame {
     );
     camera.viewport.add(_debugText);
     // -- End debug scaffolding ------------------------------------------------
+
+    // The fixed-resolution viewfinder looks at world (0,0) anchored centre by
+    // default, which would put the court's top-left corner in the middle of
+    // the screen. Aim it at the court centre so world coords map 1:1 onto the
+    // 1280×720 letterboxed screen.
+    camera.viewfinder.position = Vector2(kCourtWidth / 2, kCourtHeight / 2);
+
+    // -- World components (M1-022..024) ---------------------------------------
+    // Order matters: court is drawn first (background), then players, then the
+    // shuttle on top. All three are added to the world (not the viewport) so
+    // they live in game-unit world space where world coords == screen coords
+    // for our fixed-resolution 1280×720 camera.
+    await world.add(CourtComponent());
+    await world.add(PlayerComponent(CourtSide.left));
+    await world.add(PlayerComponent(CourtSide.right));
+    await world.add(ShuttleComponent());
   }
 
   @override
   void update(double dt) {
     super.update(dt);
     _driver.advance(dt);
+    // Recompute the cached view once per render frame (after advancing the
+    // driver so alpha is current for this frame's interpolation point).
+    _view = RenderState.lerp(_previous, _current, _driver.alpha);
     // Refresh the debug overlay every render frame (cheap string update).
     _debugText.text = _debugString();
   }
 
-  /// The interpolated render state between the previous and current ticks.
+  /// The interpolated render state between the previous and current ticks,
+  /// cached once per render frame in [update].
   ///
-  /// This is the single read surface for all Flame components. Reads alpha
-  /// from the driver so the value is always a smooth sub-tick position.
-  RenderState get view => RenderState.lerp(_previous, _current, _driver.alpha);
+  /// Components must read this for all positional data and must never reach
+  /// into the simulation directly. The value is recomputed once per [update]
+  /// call (once per render frame) so repeated reads within a frame return the
+  /// identical object without re-lerping.
+  RenderState get view => _view;
 
   /// Returns all [RenderEvent]s accumulated since the last call and clears the
   /// pending queue.
