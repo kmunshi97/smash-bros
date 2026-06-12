@@ -14,6 +14,7 @@ export 'input/input.dart';
 export 'math/fix.dart';
 export 'math/fix_vec2.dart';
 export 'random/game_random.dart';
+export 'render/render.dart';
 export 'rules/rules.dart';
 export 'sim/sim.dart';
 export 'systems/systems.dart';

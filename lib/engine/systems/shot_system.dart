@@ -39,10 +39,12 @@ final class ShotModifiers {
 @immutable
 final class SwingResult {
   /// Creates a swing result for the connected [shotType] with its computed
-  /// [launchVelocity] and whether the player [wasAirborne] at contact.
+  /// [launchVelocity], the [side] of the court the hitter occupies, and
+  /// whether the player [wasAirborne] at contact.
   const SwingResult({
     required this.shotType,
     required this.launchVelocity,
+    required this.side,
     required this.wasAirborne,
   });
 
@@ -52,6 +54,13 @@ final class SwingResult {
   /// The velocity imparted to the shuttle, in game units per tick.
   final FixVec2 launchVelocity;
 
+  /// The court side of the player who hit the shuttle.
+  ///
+  /// Populated from [Player.courtSide] at the moment [ShotSystem.trySwing]
+  /// connects. The presentation layer uses this to attribute sounds and
+  /// visual effects to the correct player.
+  final CourtSide side;
+
   /// Whether the player was off the ground at the moment of contact.
   final bool wasAirborne;
 
@@ -60,15 +69,16 @@ final class SwingResult {
       other is SwingResult &&
       other.shotType == shotType &&
       other.launchVelocity == launchVelocity &&
+      other.side == side &&
       other.wasAirborne == wasAirborne;
 
   @override
-  int get hashCode => Object.hash(shotType, launchVelocity, wasAirborne);
+  int get hashCode => Object.hash(shotType, launchVelocity, side, wasAirborne);
 
   @override
   String toString() =>
       'SwingResult(shotType: $shotType, launchVelocity: $launchVelocity, '
-      'wasAirborne: $wasAirborne)';
+      'side: $side, wasAirborne: $wasAirborne)';
 }
 
 /// Resolves a player's attempt to hit the shuttle into a launch (or a whiff).
@@ -195,6 +205,7 @@ abstract final class ShotSystem {
     return SwingResult(
       shotType: shotType,
       launchVelocity: velocity,
+      side: player.courtSide,
       wasAirborne: wasAirborne,
     );
   }
