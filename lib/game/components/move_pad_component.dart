@@ -5,11 +5,18 @@ import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
 // ---------------------------------------------------------------------------
-// MovePadComponent — M1-025
+// MovePadComponent — M1-025 (reskinned M1-027)
 //
 // Renders two side-by-side d-pad buttons (◀ ▶) anchored to the bottom-left
 // of the HUD viewport. Touch events drive moveLeft / moveRight hold flags on
 // the game's LocalControlState.
+//
+// Visual changes in M1-027:
+//   • Chunky orange-gold rounded-rect buttons with a 3-unit darker outline,
+//     a lighter bevel highlight on the top half, and dark-brown glyph text.
+//   • Pressed state fills the whole face with the brighter buttonPressed tone.
+//
+// Geometry, hit areas, and callbacks are UNCHANGED from M1-025.
 //
 // Physical-size reasoning
 // -----------------------
@@ -30,6 +37,8 @@ const _kPadHeight = 90.0;
 const _kPadSpacing = 8.0;
 const _kPadCornerRadius = 16.0;
 const _kEdgeMargin = 12.0; // gap from viewport edge (before safe-area offset)
+const _kOutlineWidth = 3.0;
+const _kBevelInset = 4.0; // inset of the bevel highlight rect
 
 /// A single rounded-rect pad that tracks one directional hold.
 class _DirPad extends PositionComponent with TapCallbacks {
@@ -49,25 +58,36 @@ class _DirPad extends PositionComponent with TapCallbacks {
 
   bool _pressed = false;
 
-  static final Paint _normalPaint = Paint()
-    ..color = GamePalette.leftPlayer.withAlpha(140);
-  static final Paint _pressedPaint = Paint()
-    ..color = GamePalette.leftPlayer.withAlpha(230);
+  // Button face paint (normal and pressed are computed in render to keep code clear).
+  static final Paint _outlinePaint = Paint()
+    ..color = GamePalette.buttonOutline
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = _kOutlineWidth;
+
+  static final Paint _bevelPaint = Paint()..color = GamePalette.buttonBevel;
 
   late final TextPaint _textPaint = TextPaint(
     style: const TextStyle(
-      fontSize: 36,
-      color: GamePalette.courtLines,
+      fontSize: 38,
+      color: GamePalette.buttonGlyph,
       fontWeight: FontWeight.bold,
     ),
   );
 
-  final RRect _rrect = RRect.fromLTRBR(
+  static final RRect _outerRRect = RRect.fromLTRBR(
     0,
     0,
     _kPadWidth,
     _kPadHeight,
     const Radius.circular(_kPadCornerRadius),
+  );
+
+  static final RRect _bevelRRect = RRect.fromLTRBR(
+    _kBevelInset,
+    _kBevelInset,
+    _kPadWidth - _kBevelInset,
+    _kPadHeight * 0.45,
+    const Radius.circular(_kPadCornerRadius - 2),
   );
 
   @override
@@ -90,7 +110,20 @@ class _DirPad extends PositionComponent with TapCallbacks {
 
   @override
   void render(Canvas canvas) {
-    canvas.drawRRect(_rrect, _pressed ? _pressedPaint : _normalPaint);
+    // 1. Button face — brighter when pressed.
+    final facePaint = Paint()
+      ..color = _pressed ? GamePalette.buttonPressed : GamePalette.buttonFace;
+    canvas.drawRRect(_outerRRect, facePaint);
+
+    // 2. Bevel highlight — lighter top-arc (skipped when pressed for depth).
+    if (!_pressed) {
+      canvas.drawRRect(_bevelRRect, _bevelPaint);
+    }
+
+    // 3. Dark outline.
+    canvas.drawRRect(_outerRRect, _outlinePaint);
+
+    // 4. Glyph (arrow label).
     _textPaint.render(
       canvas,
       label,

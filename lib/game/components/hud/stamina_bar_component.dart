@@ -6,15 +6,16 @@ import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
 // ---------------------------------------------------------------------------
-// StaminaBarComponent — M1-026
+// StaminaBarComponent — M1-026 (reskinned M1-027)
 //
 // A 220×18 game-unit stamina bar anchored to the top-left (CourtSide.left)
-// or top-right (CourtSide.right) of the viewport, with a 2-unit border.
+// or top-right (CourtSide.right) of the viewport.
 //
-// Fill colour:
-//   • Green (GamePalette.staminaFill) when stamina ≥ kStaminaDebuffThreshold.
-//   • Alert red (GamePalette.staminaLow) when below the threshold.
+// Visual changes in M1-027:
+//   • Dark panel background with thin gold outline (matching button style).
+//   • Rounded rect border.
 //
+// Mechanics (fill fraction, colour thresholds) are UNCHANGED from M1-026.
 // Position in tick order: reads only from game.view (RenderState snapshot);
 // never touches the simulation.
 // ---------------------------------------------------------------------------
@@ -24,6 +25,7 @@ const double _kBarHeight = 18;
 const double _kBorder = 2;
 const double _kEdgeMargin = 12;
 const double _kTopMargin = 12;
+const double _kBarCorner = 4;
 
 /// A per-side stamina bar rendered in the top-left or top-right corner of the
 /// HUD viewport.
@@ -32,8 +34,7 @@ const double _kTopMargin = 12;
 /// `game.view` each frame.
 ///
 /// [safeArea] is in game units; the top and left/right insets clear the device
-/// status bar and notch. Updated via `BadmintonGame.safeArea` setter each
-/// frame.
+/// status bar and notch.
 class StaminaBarComponent extends PositionComponent
     with HasGameReference<BadmintonGame> {
   /// Creates a stamina bar for [side], offset by [safeArea].
@@ -59,17 +60,14 @@ class StaminaBarComponent extends PositionComponent
 
     const outerWidth = _kBarWidth;
     const outerHeight = _kBarHeight;
-    final outerRect = Rect.fromLTWH(leftX, topY, outerWidth, outerHeight);
+    final outerRRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(leftX, topY, outerWidth, outerHeight),
+      const Radius.circular(_kBarCorner),
+    );
 
-    // -- Border / background --------------------------------------------------
+    // -- Background (dark recessed panel) -------------------------------------
     final bgPaint = Paint()..color = GamePalette.staminaBarBackground;
-    canvas.drawRect(outerRect, bgPaint);
-
-    final borderPaint = Paint()
-      ..color = GamePalette.staminaBarBorder
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _kBorder;
-    canvas.drawRect(outerRect, borderPaint);
+    canvas.drawRRect(outerRRect, bgPaint);
 
     // -- Fill -----------------------------------------------------------------
     const innerWidth = _kBarWidth - _kBorder * 2;
@@ -88,14 +86,19 @@ class StaminaBarComponent extends PositionComponent
 
     final fillWidth = (innerWidth * fraction).clamp(0.0, innerWidth);
     if (fillWidth > 0) {
-      final fillRect = Rect.fromLTWH(
-        innerLeft,
-        innerTop,
-        fillWidth,
-        innerHeight,
+      final fillRRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(innerLeft, innerTop, fillWidth, innerHeight),
+        const Radius.circular(_kBarCorner - _kBorder),
       );
       final fillPaint = Paint()..color = fillColor;
-      canvas.drawRect(fillRect, fillPaint);
+      canvas.drawRRect(fillRRect, fillPaint);
     }
+
+    // -- Gold outline (thin border) -------------------------------------------
+    final borderPaint = Paint()
+      ..color = GamePalette.staminaBarBorder
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _kBorder;
+    canvas.drawRRect(outerRRect, borderPaint);
   }
 }
