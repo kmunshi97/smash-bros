@@ -165,6 +165,12 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
     final pv = _playerView;
     if (pv == null) return;
 
+    // Project the whole avatar (shadow, sprite, stun FX) from engine space onto
+    // the drawn perspective court (M2 POC). Everything below draws in engine
+    // coordinates; the projection maps it to the visible court.
+    canvas.save();
+    game.courtProjection.applyToCanvas(canvas);
+
     final feetY = pv.feetY;
     final centreX = pv.x;
     final facingRight = pv.facing == Facing.right;
@@ -280,6 +286,9 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
         _drawStar(canvas, starX, starY, _kStarRadius, _dizzyStarPaint);
       }
     }
+
+    // Close the court projection opened at the top of render().
+    canvas.restore();
   }
 
   /// Draws a 5-pointed star centred at ([cx],[cy]) with outer [radius].

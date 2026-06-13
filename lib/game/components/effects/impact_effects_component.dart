@@ -132,6 +132,13 @@ class ImpactEffectsComponent extends Component
     if (override != null) {
       override(system);
     } else {
+      // Project the spawn origin onto the visual court (M2 POC) so bursts line
+      // up with the projected players/shuttle. Particle spread velocities stay
+      // in screen units, so only the origin needs projecting.
+      system.position = game.courtProjection.apply(
+        system.position.x,
+        system.position.y,
+      );
       game.world.add(system);
     }
   }

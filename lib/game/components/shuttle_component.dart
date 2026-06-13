@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:flame/components.dart';
 import 'package:flutter/painting.dart';
@@ -52,9 +53,25 @@ class ShuttleComponent extends Component with HasGameReference<BadmintonGame> {
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.8;
 
+  /// Feather-skirt fill — a faint off-white so the white cork still reads as
+  /// the brightest part of the shuttlecock.
+  static final _featherPaint = Paint()..color = const Color(0xFFEDEDED);
+
+  /// Thin grey ribs suggesting individual feathers.
+  static final _featherRibPaint = Paint()
+    ..color = GamePalette.shuttleOutline.withValues(alpha: 0.5)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1;
+
   /// Current shuttle position in game-unit world space.
   Vector2 get position => _position;
   Vector2 _position = Vector2.zero();
+
+  // Velocity-derived flight orientation (radians), smoothed across frames so a
+  // momentary zero-velocity tick doesn't snap the shuttlecock. Cosmetic.
+  double _angle = -math.pi / 2; // default: cork pointing up
+  // Free-running cosmetic clock for the feather flutter.
+  double _clock = 0;
 
   /// Read-only view of the trail buffer (newest first).
   ///
@@ -65,6 +82,15 @@ class ShuttleComponent extends Component with HasGameReference<BadmintonGame> {
   void update(double dt) {
     final v = game.view;
     _position = Vector2(v.shuttle.x, v.shuttle.y);
+    _clock += dt;
+
+    // Orient the shuttlecock cork-first along its velocity. Below a small speed
+    // (a parked serve) keep the last orientation so it doesn't spin from noise.
+    final vx = v.shuttle.vx;
+    final vy = v.shuttle.vy;
+    if (vx * vx + vy * vy > 1) {
+      _angle = math.atan2(vy, vx);
+    }
 
     if (v.phase == MatchPhase.inPlay) {
       // Push current position to the front of the trail buffer.
@@ -82,6 +108,11 @@ class ShuttleComponent extends Component with HasGameReference<BadmintonGame> {
   @override
   void render(Canvas canvas) {
     final v = game.view;
+
+    // Project shadow, trail and shuttlecock from engine space onto the drawn
+    // perspective court (M2 POC), matching the players.
+    canvas.save();
+    game.courtProjection.applyToCanvas(canvas);
 
     // 0. Ground shadow — only during inPlay (landing-spot depth cue).
     //    A small dark ellipse at (shuttle.x, kGroundY); size and opacity scale
@@ -127,20 +158,64 @@ class ShuttleComponent extends Component with HasGameReference<BadmintonGame> {
       );
     }
 
-    // 2. Shuttle fill + outline — drawn in a single cascade so the fill
-    //    sits under the outline stroke.  The outline is a thin dark ring
-    //    for readability against the new light daylight stadium backdrop
-    //    (cream ad wall, pale grandstand).
+    // 2. Shuttlecock — a cork nose + flared feather skirt, oriented cork-first
+    //    along the flight direction with a subtle feather flutter. Drawn in a
+    //    local frame (cork toward +x) then rotated to [_angle].
+    _renderShuttlecock(canvas);
+
+    // Close the court projection opened at the top of render().
+    canvas.restore();
+  }
+
+  /// Draws the shuttlecock at [_position], rotated so the cork leads along the
+  /// flight direction. Local frame: +x is the direction of travel (cork nose),
+  /// −x is the trailing feather skirt.
+  void _renderShuttlecock(Canvas canvas) {
+    // Geometry scaled off the collision radius so the silhouette stays
+    // proportional if the radius is ever retuned.
+    const r = kShuttleRadius;
+    const corkR = r * 0.9; // cork nose radius
+    const noseX = r * 1.4; // cork centre, ahead of the body
+    const skirtBackX = -r * 2.2; // tail of the feather skirt
+    const skirtBaseX = r * 0.2; // where the skirt meets the cork
+    const skirtHalf = r * 1.7; // half-width of the skirt mouth
+
+    // Feather flutter: the skirt mouth breathes a little and the whole cock
+    // wobbles a couple of degrees about the flight line.
+    final flutter = math.sin(_clock * 14) * (r * 0.18);
+    final wobble = math.sin(_clock * 9) * 0.06;
+
     canvas
-      ..drawCircle(
-        Offset(_position.x, _position.y),
-        kShuttleRadius,
-        _shuttlePaint,
-      )
-      ..drawCircle(
-        Offset(_position.x, _position.y),
-        kShuttleRadius,
-        _shuttleOutlinePaint,
+      ..save()
+      ..translate(_position.x, _position.y)
+      ..rotate(_angle + wobble);
+
+    // Feather skirt — a trapezoid mouth from the cork base out to the tail.
+    final half = skirtHalf + flutter;
+    final skirt = Path()
+      ..moveTo(skirtBaseX, -r * 0.5)
+      ..lineTo(skirtBackX, -half)
+      ..lineTo(skirtBackX, half)
+      ..lineTo(skirtBaseX, r * 0.5)
+      ..close();
+    canvas
+      ..drawPath(skirt, _featherPaint)
+      ..drawPath(skirt, _shuttleOutlinePaint);
+
+    // Feather ribs for a bit of detail (cork base → evenly spaced tail points).
+    for (var i = -2; i <= 2; i++) {
+      final ty = (half * i) / 2;
+      canvas.drawLine(
+        const Offset(skirtBaseX, 0),
+        Offset(skirtBackX, ty),
+        _featherRibPaint,
       );
+    }
+
+    // Cork nose — a filled dome with an outline, drawn last so it sits on top.
+    canvas
+      ..drawCircle(const Offset(noseX, 0), corkR, _shuttlePaint)
+      ..drawCircle(const Offset(noseX, 0), corkR, _shuttleOutlinePaint)
+      ..restore();
   }
 }

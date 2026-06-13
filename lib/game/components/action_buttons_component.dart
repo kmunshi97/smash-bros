@@ -18,21 +18,21 @@ import 'package:smash_bros/game/palette.dart';
 //
 // Three circular buttons hug the bottom-right corner in a tight tray:
 //
-//   • JUMP & SMASH (primary, radius 48) — innermost, at the corner.
+//   • JUMP & SMASH (primary, radius 60) — innermost, at the corner.
 //     Two-line label "JUMP\nSMASH". On tap it calls
 //     game.controls.pressJumpSmash(airborne: <derived from view>) — the
 //     combo issues a jump + delayed apex smash when grounded, or an
 //     immediate smash when already airborne.
 //
-//   • RALLY (radius 40) — directly left of the primary with a _kGap spacing.
+//   • RALLY (radius 54) — directly left of the primary with a _kGap spacing.
 //     Renamed from CLEAR; calls pressNormal.
 //
-//   • DROP (radius 40) — directly above the primary with a _kGap spacing.
+//   • DROP (radius 54) — directly above the primary with a _kGap spacing.
 //     Calls pressDrop.
 //
-// Cluster footprint: primary centre is ~70 units from the corner along the
-// 45° diagonal; RALLY and DROP are adjacent. Total extent ≤ 230 units from
-// the corner. All buttons are ≥ 48dp diameter (primary = 96dp, others = 80dp).
+// Cluster footprint: primary centre is ~84 units from the corner along the
+// 45° diagonal; RALLY and DROP are adjacent. All three are sized for
+// comfortable mobile taps (see the radius constants for the dp reasoning).
 //
 // ## Serving state
 //
@@ -56,25 +56,26 @@ import 'package:smash_bros/game/palette.dart';
 // outline, pressed fill, and charge-arc ring for the TOSS slot. Palette
 // entries are unchanged.
 //
-// Physical-size reasoning
-// -----------------------
-// At the 1280×720 fixed-resolution viewport on a typical landscape phone the
-// scale is ~1.0 dp per game unit. The primary button (radius 48 = diameter 96)
-// is comfortably above the 48dp interaction minimum. Secondary buttons
-// (radius 40 = diameter 80) are also above 48dp.
 // ---------------------------------------------------------------------------
 
 // Primary button (JUMP&SMASH / TOSS) radius.
-const double _kPrimaryRadius = 48;
+//
+// Sizes bumped (M2 POC) for comfortable mobile taps: on a typical landscape
+// phone the 1280-unit viewport scales to ~700–900 logical px, so 1 game unit
+// is ~0.55–0.7 dp. The old secondary radius (40 → 80-unit diameter ≈ 44–56 dp)
+// sat at/below the 48 dp minimum; these larger radii keep RALLY/DROP at
+// ~64–80 dp diameter on the same phones.
+const double _kPrimaryRadius = 60;
 // Secondary button radius (RALLY and DROP).
-const double _kSecondaryRadius = 40;
+const double _kSecondaryRadius = 54;
 
 // Gap between adjacent button edges in the tray.
-const double _kGap = 8;
+const double _kGap = 12;
 
 // Distance from the corner anchor to the primary button centre along the 45°
-// diagonal. This places the primary snugly in the corner.
-const double _kPrimaryOffset = 70;
+// diagonal. This places the primary snugly in the corner. Scaled up with the
+// larger primary so the cluster still hugs the corner without clipping it.
+const double _kPrimaryOffset = 84;
 
 const double _kEdgeMargin = 12; // gap from viewport edge (before safe-area)
 const double _kOutlineWidth = 3;
@@ -120,7 +121,7 @@ class _ActionButton extends PositionComponent with TapCallbacks {
 
   static final TextPaint _textPaint = TextPaint(
     style: const TextStyle(
-      fontSize: 16,
+      fontSize: 18,
       color: GamePalette.buttonGlyph,
       fontWeight: FontWeight.bold,
     ),

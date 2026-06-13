@@ -15,8 +15,10 @@ import 'package:smash_bros/engine/sim/fixed_timestep_driver.dart';
 import 'package:smash_bros/engine/sim/simulation.dart';
 import 'package:smash_bros/engine/systems/shot_type.dart';
 import 'package:smash_bros/game/components/components.dart';
+import 'package:smash_bros/game/court_projection.dart';
 import 'package:smash_bros/game/effects/screen_shake.dart';
 import 'package:smash_bros/game/input/local_control_state.dart';
+import 'package:smash_bros/game/ui/pause_menu.dart';
 
 /// The Flame game host for Arcade Badminton (M1-020, extended in M1-025/029).
 ///
@@ -171,6 +173,11 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   /// onTick drains it once per simulation tick.
   final LocalControlState controls = LocalControlState();
 
+  /// Maps engine play-space onto the drawn perspective court (M2 POC). Gameplay
+  /// components read this to project their draws; the debug court-alignment
+  /// overlay mutates it to calibrate against the art.
+  final CourtProjection courtProjection = CourtProjection.defaults();
+
   // Snapshot pair for interpolation.
   late RenderState _previous;
   late RenderState _current;
@@ -201,6 +208,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   late StaminaBarComponent _staminaLeft;
   late StaminaBarComponent _staminaRight;
   late PhaseBannerComponent _phaseBanner;
+  late PauseButtonComponent _pauseButton;
 
   // -- FlameGame overrides ---------------------------------------------------
 
@@ -273,10 +281,24 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       safeArea: _safeArea,
     );
     _phaseBanner = PhaseBannerComponent();
+    _pauseButton = PauseButtonComponent(safeArea: _safeArea);
     await camera.viewport.add(_scoreHud);
     await camera.viewport.add(_staminaLeft);
     await camera.viewport.add(_staminaRight);
     await camera.viewport.add(_phaseBanner);
+    await camera.viewport.add(_pauseButton);
+
+    // -- Pause menu overlay (M2-016) -----------------------------------------
+    // Registered on the game (not via GameWidget.overlayBuilderMap) so the
+    // builder always exists — openPauseMenu can add it in any host, including
+    // headless tests. Full-screen (no popups, per the design rule).
+    overlays.addEntry(
+      pauseOverlayId,
+      (context, game) => PauseMenu(
+        onResume: closePauseMenu,
+        onRestart: restartFromMenu,
+      ),
+    );
 
     // -- Tap-to-restart overlay (M1-029) — added last so it has the highest
     // priority and does not block normal HUD components while in play. During
@@ -357,6 +379,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       _scoreHud.safeArea = value;
       _staminaLeft.safeArea = value;
       _staminaRight.safeArea = value;
+      _pauseButton.safeArea = value;
     }
   }
 
@@ -484,6 +507,46 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     return false;
   }
 
+  // -- Pause flow (M2-016) ---------------------------------------------------
+
+  /// The Flame overlay id for the full-screen pause menu (no popups: the menu
+  /// covers the whole screen per the design rule).
+  static const String pauseOverlayId = 'pause';
+
+  /// Whether the player paused via the menu (as opposed to an app-background
+  /// pause). Kept so a background→foreground cycle does not silently resume a
+  /// match the player deliberately paused.
+  bool _manuallyPaused = false;
+
+  /// Whether the pause menu is currently showing.
+  bool get isPausedByMenu => _manuallyPaused;
+
+  /// Opens the pause menu and freezes the simulation. Idempotent.
+  void openPauseMenu() {
+    if (_manuallyPaused) return;
+    _manuallyPaused = true;
+    pauseEngine();
+    if (!overlays.isActive(pauseOverlayId)) overlays.add(pauseOverlayId);
+  }
+
+  /// Restarts the match from the pause menu with fresh wall-clock seeds, then
+  /// closes the menu. Wall-clock seeding is game-layer only (see CLAUDE.md).
+  void restartFromMenu() {
+    final base = DateTime.now().millisecondsSinceEpoch;
+    restartMatch(seed: base, aiSeed: base ^ 0xDEADBEEF);
+    closePauseMenu();
+  }
+
+  /// Closes the pause menu and resumes the simulation. Idempotent.
+  void closePauseMenu() {
+    if (!_manuallyPaused) return;
+    _manuallyPaused = false;
+    if (overlays.isActive(pauseOverlayId)) overlays.remove(pauseOverlayId);
+    // Discard banked time so the pause is not simulated as a catch-up burst.
+    _driver.reset();
+    resumeEngine();
+  }
+
   // -- Lifecycle -------------------------------------------------------------
 
   @override
@@ -496,6 +559,9 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       case AppLifecycleState.inactive:
         pauseEngine();
       case AppLifecycleState.resumed:
+        // A deliberately-paused match stays paused across a background cycle;
+        // only auto-resume when the menu is not up.
+        if (_manuallyPaused) return;
         // Discard banked time so the pause duration is not simulated as a
         // spike of catch-up ticks (see FixedTimestepDriver.reset).
         _driver.reset();
