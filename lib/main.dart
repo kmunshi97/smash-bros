@@ -1,9 +1,14 @@
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:smash_bros/engine/ai/basic_ai.dart';
+import 'package:smash_bros/engine/ai/ai.dart';
 import 'package:smash_bros/engine/entities/court.dart';
+import 'package:smash_bros/engine/entities/tunables.dart';
 import 'package:smash_bros/game/badminton_game.dart';
+import 'package:smash_bros/game/balance_loader.dart';
+import 'package:smash_bros/game/components/hud/tuning_overlay.dart';
+import 'package:smash_bros/game/ui/court_align_overlay.dart';
 import 'package:smash_bros/ui/theme/theme.dart';
 
 Future<void> main() async {
@@ -19,6 +24,10 @@ Future<void> main() async {
   // navigation bar; they reappear on swipe and auto-hide again. Harmless on
   // iOS and macOS dev targets.
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  // M1-032: load feel-tuning config from assets before any simulation is
+  // built, so the first match already uses the tuned values. Falls back to
+  // BalanceConfig.defaults() on any error (see BalanceLoader).
+  Tunables.apply(await BalanceLoader.load());
   runApp(const MainApp());
 }
 
@@ -73,10 +82,15 @@ class _GameScreenState extends State<GameScreen> {
     // engine. The engine never calls dart:math directly (see CLAUDE.md).
     // Both seeds are derived from the same millisecond base; XOR offset ensures
     // they differ so the AI PRNG stream is independent of the match PRNG stream.
+    // The opponent's difficulty tier is rolled at random from the AI seed —
+    // easy, hard, or challenging — fresh each match.
     final base = DateTime.now().millisecondsSinceEpoch;
+    final aiSeed = base ^ 0xDEADBEEF;
     _game = BadmintonGame(
       seed: base,
-      rightAi: BasicAI(side: CourtSide.right, seed: base ^ 0xDEADBEEF),
+      rightAi: AiDifficulty.roll(
+        aiSeed,
+      ).build(side: CourtSide.right, seed: aiSeed),
     );
   }
 
@@ -116,6 +130,41 @@ class _GameScreenState extends State<GameScreen> {
 
     // Do NOT wrap GameWidget in SafeArea — that would letterbox the court away
     // from the notch. Touch controls handle their own safe-area insets.
-    return GameWidget(game: _game);
+    //
+    // The full-screen pause menu (M2-016) is a Flame overlay registered on the
+    // game itself (see BadmintonGame.onLoad), so it covers the whole game
+    // surface (no popups). The pause button opens it; Resume/Restart close it.
+    final gameWidget = GameWidget(game: _game);
+
+    // Android back button (M2-033): never pop the route mid-match — route it to
+    // the pause menu instead so a stray back-gesture can't drop the player out
+    // of a game.
+    final guarded = PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _game.openPauseMenu();
+      },
+      child: gameWidget,
+    );
+
+    // M1-032: the debug feel-tuning overlay is a *dev tool*, stripped from
+    // release builds. It is not a shipping UI flow, so the "no popups" design
+    // rule does not apply; it slides in over the game and restarts the match
+    // when a slider changes so the new physics take effect cleanly.
+    if (!kDebugMode) return guarded;
+    return Stack(
+      children: [
+        guarded,
+        TuningOverlay(
+          onApply: (config) {
+            Tunables.apply(config);
+            // Fresh seeds so the retuned rally restarts cleanly.
+            final base = DateTime.now().millisecondsSinceEpoch;
+            _game.restartMatch(seed: base, aiSeed: base ^ 0xDEADBEEF);
+          },
+        ),
+        CourtAlignOverlay(projection: _game.courtProjection),
+      ],
+    );
   }
 }

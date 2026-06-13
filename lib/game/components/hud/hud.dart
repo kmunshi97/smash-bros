@@ -4,6 +4,7 @@
 /// `BadmintonGame.view` — never the simulation directly.
 library;
 
+export 'pause_button_component.dart';
 export 'phase_banner_component.dart';
 export 'restart_overlay_component.dart';
 export 'score_hud_component.dart';

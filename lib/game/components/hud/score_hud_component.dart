@@ -5,38 +5,24 @@ import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
 // ---------------------------------------------------------------------------
-// ScoreHudComponent — M1-026 (reskinned M1-027)
+// ScoreHudComponent — M1-026 (reskinned M1-027, sprite scoreboard M1-023c)
 //
-// Top-centre viewport overlay displaying:
-//   • A dark rounded scoreboard panel with 'YOU' / 'CPU' labels and the two
-//     scores as large LED-green bold digits in dark-inset slots.
+// The scoreboard panel is now part of the stadium_bg.png background asset;
+// this component only paints INTO the asset's scoreboard displays:
+//   • The two score digits, positioned over the asset's display windows.
 //   • A small serve-indicator triangle on the serving side of the score.
-//   • A 'DEUCE' tag underneath when the match is in deuce.
+//   • A 'DEUCE' tag underneath the scoreboard when the match is in deuce.
+//
+// The digit anchor coordinates below are measured from stadium_bg.png at its
+// native 1280×720 layout — if the asset is redrawn, re-measure them.
 //
 // Behaviour / game logic are UNCHANGED from M1-026.
 // Position in tick order: reads only from game.view (RenderState snapshot);
 // never touches the simulation. Re-renders each frame.
 // ---------------------------------------------------------------------------
 
-const double _kScoreFontSize = 58;
-const double _kLabelFontSize = 16;
 const double _kDeuceTagFontSize = 22;
 const double _kServeIndicatorSize = 12; // half-base of the triangle
-const double _kTopMargin = 8;
-
-// Panel geometry.
-const double _kPanelW = 320;
-const double _kPanelH = 68;
-const double _kPanelCorner = 12;
-const double _kWingW = 20; // side wings on panel
-// Inset slot for each score digit (left and right halves of the panel).
-const double _kSlotW = 90;
-const double _kSlotH = 46;
-const double _kSlotCorner = 6;
-const double _kSlotVertPad = 10; // from panel top
-const double _kSlotHorizPad = 18; // inward from left/right panel edges
-// Serve indicator: horizontal distance from panel centre to indicator tip.
-const double _kServeIndicatorHorizOffset = 158;
 
 /// Top-centre HUD component that renders the scoreboard with dark panel,
 /// LED-green digits, serve indicator, and optional DEUCE tag.
@@ -56,20 +42,19 @@ class ScoreHudComponent extends PositionComponent
   /// Updated by [BadmintonGame] whenever the device insets change.
   EdgeInsets safeArea;
 
-  static final _scorePaint = TextPaint(
+  static final _scoreLeftPaint = TextPaint(
     style: const TextStyle(
-      fontSize: _kScoreFontSize,
+      fontSize: 54,
       fontWeight: FontWeight.bold,
       color: GamePalette.scoreDigit,
     ),
   );
 
-  static final _labelPaint = TextPaint(
+  static final _scoreRightPaint = TextPaint(
     style: const TextStyle(
-      fontSize: _kLabelFontSize,
-      fontWeight: FontWeight.w600,
-      color: GamePalette.scoreLabel,
-      letterSpacing: 1,
+      fontSize: 54,
+      fontWeight: FontWeight.bold,
+      color: GamePalette.buttonPressed,
     ),
   );
 
@@ -85,147 +70,54 @@ class ScoreHudComponent extends PositionComponent
   @override
   void render(Canvas canvas) {
     final v = game.view;
-    final viewportSize = game.camera.viewport.size;
-    final topY = _kTopMargin + safeArea.top;
-    final centreX = viewportSize.x / 2;
 
-    // -- Panel background -----------------------------------------------------
-    final panelLeft = centreX - _kPanelW / 2;
-    final panelRect = Rect.fromLTWH(panelLeft, topY, _kPanelW, _kPanelH);
+    // Centre coordinates measured from the scoreboard displays baked into
+    // stadium_bg.png at its native 1280×720 layout.
+    const leftX = 522.25;
+    const rightX = 755.9;
+    const scoreY = 124.79;
 
-    // Wing extensions on left and right.
-    final wingPaint = Paint()..color = GamePalette.scorePanelAccent;
-    canvas
-      ..drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(
-            panelLeft - _kWingW,
-            topY + 12,
-            _kWingW,
-            _kPanelH - 24,
-          ),
-          const Radius.circular(4),
-        ),
-        wingPaint,
-      )
-      ..drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(
-            panelLeft + _kPanelW,
-            topY + 12,
-            _kWingW,
-            _kPanelH - 24,
-          ),
-          const Radius.circular(4),
-        ),
-        wingPaint,
-      );
-
-    // Main panel.
-    final panelPaint = Paint()..color = GamePalette.scoreboardPanel;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(panelRect, const Radius.circular(_kPanelCorner)),
-      panelPaint,
+    // Render left score digit (green)
+    _scoreLeftPaint.render(
+      canvas,
+      '${v.leftScore}',
+      Vector2(leftX, scoreY),
+      anchor: Anchor.center,
     );
 
-    // -- Digit inset slots ----------------------------------------------------
-    final slotTop = topY + _kSlotVertPad;
-    final leftSlotRect = Rect.fromLTWH(
-      panelLeft + _kSlotHorizPad,
-      slotTop,
-      _kSlotW,
-      _kSlotH,
-    );
-    final rightSlotRect = Rect.fromLTWH(
-      panelLeft + _kPanelW - _kSlotHorizPad - _kSlotW,
-      slotTop,
-      _kSlotW,
-      _kSlotH,
-    );
-    final slotPaint = Paint()..color = GamePalette.scoreDigitInset;
-    canvas
-      ..drawRRect(
-        RRect.fromRectAndRadius(
-          leftSlotRect,
-          const Radius.circular(_kSlotCorner),
-        ),
-        slotPaint,
-      )
-      ..drawRRect(
-        RRect.fromRectAndRadius(
-          rightSlotRect,
-          const Radius.circular(_kSlotCorner),
-        ),
-        slotPaint,
-      );
-
-    // -- 'YOU' / 'CPU' labels (above digit slots) ----------------------------
-    _labelPaint
-      ..render(
-        canvas,
-        'YOU',
-        Vector2(leftSlotRect.center.dx, topY + 3),
-        anchor: Anchor.topCenter,
-      )
-      ..render(
-        canvas,
-        'CPU',
-        Vector2(rightSlotRect.center.dx, topY + 3),
-        anchor: Anchor.topCenter,
-      );
-
-    // -- Score digits ---------------------------------------------------------
-    final scoreY = slotTop + _kSlotH / 2 - 4;
-    _scorePaint
-      ..render(
-        canvas,
-        '${v.leftScore}',
-        Vector2(leftSlotRect.center.dx, scoreY),
-        anchor: Anchor.center,
-      )
-      ..render(
-        canvas,
-        '${v.rightScore}',
-        Vector2(rightSlotRect.center.dx, scoreY),
-        anchor: Anchor.center,
-      );
-
-    // -- Separator dash -------------------------------------------------------
-    final dashPaint = Paint()
-      ..color = GamePalette.scoreLabel
-      ..strokeWidth = 2;
-    canvas.drawLine(
-      Offset(centreX - 6, topY + _kPanelH / 2),
-      Offset(centreX + 6, topY + _kPanelH / 2),
-      dashPaint,
+    // Render right score digit (orange/gold)
+    _scoreRightPaint.render(
+      canvas,
+      '${v.rightScore}',
+      Vector2(rightX, scoreY),
+      anchor: Anchor.center,
     );
 
-    // -- Serve indicator (triangle) -------------------------------------------
-    final scoreTextMidY = topY + _kPanelH / 2;
-
+    // Render serve indicator next to the active server's score digit
     if (v.server == CourtSide.left) {
       _drawServeTriangle(
         canvas,
-        cx: centreX - _kServeIndicatorHorizOffset,
-        cy: scoreTextMidY,
+        cx: leftX - 38,
+        cy: scoreY,
         pointingRight: true,
       );
     } else {
       _drawServeTriangle(
         canvas,
-        cx: centreX + _kServeIndicatorHorizOffset,
-        cy: scoreTextMidY,
+        cx: rightX + 38,
+        cy: scoreY,
         pointingRight: false,
       );
     }
 
-    // -- DEUCE tag ------------------------------------------------------------
+    // Render DEUCE tag centered below the scoreboard
     if (v.isDeuce) {
-      final deuceY = topY + _kPanelH + 4;
+      const deuceX = 640.0;
+      const deuceY = 185.0;
       _deucePaint.render(
         canvas,
         'DEUCE',
-        Vector2(centreX, deuceY),
+        Vector2(deuceX, deuceY),
         anchor: Anchor.topCenter,
       );
     }

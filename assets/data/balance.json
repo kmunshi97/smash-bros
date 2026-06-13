@@ -1,0 +1,20 @@
+{
+  "_comment": "Feel-tuning parameters (M1-032). Mirrors BalanceConfig.defaults() — edit to retune the rally without recompiling. Structural geometry, shot angles, and scoring are NOT here (see Tunables/constants.dart).",
+  "shuttleGravity": 0.14,
+  "shuttleDragCoefficient": 0.001,
+  "shuttleDropShotDrag": 0.001,
+  "shuttleMaxVelocity": 20,
+  "netCordDamping": 0.5,
+  "normalShotSpeed": 12,
+  "smashSpeed": 16,
+  "dropShotSpeed": 9,
+  "jumpSmashBonus": 1.15,
+  "tossSpeedMin": 12,
+  "tossSpeedMax": 17,
+  "playerSpeed": 6,
+  "staminaDrainNormal": 5,
+  "staminaDrainSmash": 15,
+  "staminaDrainJump": 8,
+  "staminaDrainMove": 0.5,
+  "staminaRegen": 0.3
+}

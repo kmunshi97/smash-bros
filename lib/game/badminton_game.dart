@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/input.dart';
@@ -6,15 +7,18 @@ import 'package:flame/input.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' hide Simulation;
-import 'package:smash_bros/engine/ai/ai_controller.dart';
-import 'package:smash_bros/engine/ai/basic_ai.dart';
+import 'package:smash_bros/engine/ai/ai.dart';
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
 import 'package:smash_bros/engine/sim/fixed_timestep_driver.dart';
 import 'package:smash_bros/engine/sim/simulation.dart';
+import 'package:smash_bros/engine/systems/shot_type.dart';
 import 'package:smash_bros/game/components/components.dart';
+import 'package:smash_bros/game/court_projection.dart';
+import 'package:smash_bros/game/effects/screen_shake.dart';
 import 'package:smash_bros/game/input/local_control_state.dart';
+import 'package:smash_bros/game/ui/pause_menu.dart';
 
 /// The Flame game host for Arcade Badminton (M1-020, extended in M1-025/029).
 ///
@@ -62,10 +66,13 @@ import 'package:smash_bros/game/input/local_control_state.dart';
 ///   ←/A            → moveLeft hold
 ///   →/D            → moveRight hold
 ///   T              → tossHeld hold (hold to charge, release to serve)
-///   Space          → jump
-///   J              → smash
+///   Space          → plain jump (kept for dev experiments; the shipping
+///                    control is the merged jump-smash below)
+///   J              → jump & smash combo: grounded = jump now + smash at the
+///                    jump apex; airborne = smash immediately (M1-036 —
+///                    mirrors the touch JUMP&SMASH button exactly)
 ///   K              → drop shot
-///   L              → normal shot
+///   L              → rally (normal) shot
 class BadmintonGame extends FlameGame with KeyboardEvents {
   /// Creates a game with a deterministic [seed], the given [firstServer], and
   /// a match played to [targetScore].
@@ -93,7 +100,41 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
          ),
        ) {
     _initDriver();
+    rightCharacter = _pickOpponent(seed);
+    rightAiDifficulty = rightAi is RuleBasedAi ? rightAi.difficulty : null;
   }
+
+  /// Picks the opponent character for a match from its [seed].
+  ///
+  /// Pure game-layer presentation: the engine never sees the character
+  /// choice, so this does not touch the simulation's seeded PRNG stream.
+  static CharacterType _pickOpponent(int seed) {
+    const opponents = [
+      CharacterType.mukesh,
+      CharacterType.jeff,
+      CharacterType.elon,
+    ];
+    return opponents[math.Random(seed).nextInt(opponents.length)];
+  }
+
+  /// The character type for the left player (always red astronaut).
+  final CharacterType leftCharacter = CharacterType.astronautRed;
+
+  /// The randomly selected character type for the opponent (right player).
+  late CharacterType rightCharacter;
+
+  /// The difficulty tier of the current right-side AI, or `null` when the
+  /// right player is not driven by a [RuleBasedAi] (two-human/testing).
+  ///
+  /// Rolled at random per match (see [restartMatch]); exposed so the HUD or
+  /// a post-match screen can reveal which opponent the player drew.
+  AiDifficulty? rightAiDifficulty;
+
+  /// Cached character sprites.
+  late final Sprite astronautRedSprite;
+  late final Sprite mukeshSprite;
+  late final Sprite jeffSprite;
+  late final Sprite elonSprite;
 
   Simulation _simulation;
   AIController? _rightAi;
@@ -132,9 +173,20 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   /// onTick drains it once per simulation tick.
   final LocalControlState controls = LocalControlState();
 
+  /// Maps engine play-space onto the drawn perspective court (M2 POC). Gameplay
+  /// components read this to project their draws; the debug court-alignment
+  /// overlay mutates it to calibrate against the art.
+  final CourtProjection courtProjection = CourtProjection.defaults();
+
   // Snapshot pair for interpolation.
   late RenderState _previous;
   late RenderState _current;
+
+  // -- Screen shake (M2-003) --------------------------------------------------
+  // The camera's resting look-at point; the shake offset is added to it each
+  // frame. Cosmetic only — never feeds the simulation.
+  final ScreenShake _shake = ScreenShake();
+  late Vector2 _cameraBase;
 
   // Cached interpolated view, recomputed once per render frame in [update].
   late RenderState _view;
@@ -156,12 +208,19 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   late StaminaBarComponent _staminaLeft;
   late StaminaBarComponent _staminaRight;
   late PhaseBannerComponent _phaseBanner;
+  late PauseButtonComponent _pauseButton;
 
   // -- FlameGame overrides ---------------------------------------------------
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+
+    // Cache the character sprites
+    astronautRedSprite = await loadSprite('player_red_astronaut.png');
+    mukeshSprite = await loadSprite('opponent_mukesh.png');
+    jeffSprite = await loadSprite('opponent_jeff.png');
+    elonSprite = await loadSprite('opponent_elon.png');
 
     // Boot the engine and capture the initial state into both slots so the
     // first [view] call never reads uninitialised memory.
@@ -182,7 +241,8 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     // default, which would put the court's top-left corner in the middle of
     // the screen. Aim it at the court centre so world coords map 1:1 onto the
     // 1280×720 letterboxed screen.
-    camera.viewfinder.position = Vector2(kCourtWidth / 2, kCourtHeight / 2);
+    _cameraBase = Vector2(kCourtWidth / 2, kCourtHeight / 2);
+    camera.viewfinder.position = _cameraBase;
 
     // -- World components (M1-022..024) ---------------------------------------
     // Order matters: court is drawn first (background), then players, then the
@@ -193,6 +253,13 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     await world.add(PlayerComponent(CourtSide.left));
     await world.add(PlayerComponent(CourtSide.right));
     await world.add(ShuttleComponent());
+
+    // -- Impact juice (M2-003/004/030) ---------------------------------------
+    // Both read game.frameEvents only. The effects component spawns particle
+    // systems into the world; the haptics component buzzes the device. Screen
+    // shake is driven from update() (it nudges the camera, not the world).
+    await world.add(ImpactEffectsComponent());
+    await add(HapticsComponent());
 
     // -- Touch controls (M1-025) added to viewport (HUD space) ---------------
     // Each component handles its own safe-area insets; updates its anchor
@@ -214,10 +281,24 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       safeArea: _safeArea,
     );
     _phaseBanner = PhaseBannerComponent();
+    _pauseButton = PauseButtonComponent(safeArea: _safeArea);
     await camera.viewport.add(_scoreHud);
     await camera.viewport.add(_staminaLeft);
     await camera.viewport.add(_staminaRight);
     await camera.viewport.add(_phaseBanner);
+    await camera.viewport.add(_pauseButton);
+
+    // -- Pause menu overlay (M2-016) -----------------------------------------
+    // Registered on the game (not via GameWidget.overlayBuilderMap) so the
+    // builder always exists — openPauseMenu can add it in any host, including
+    // headless tests. Full-screen (no popups, per the design rule).
+    overlays.addEntry(
+      pauseOverlayId,
+      (context, game) => PauseMenu(
+        onResume: closePauseMenu,
+        onRestart: restartFromMenu,
+      ),
+    );
 
     // -- Tap-to-restart overlay (M1-029) — added last so it has the highest
     // priority and does not block normal HUD components while in play. During
@@ -237,10 +318,33 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
         ? const []
         : List<RenderEvent>.unmodifiable(_pendingEvents.toList());
     _pendingEvents.clear();
+
+    // -- Screen shake (M2-003) ------------------------------------------------
+    // Trigger off this frame's events: a smash punches the camera (harder when
+    // airborne — the jump smash), a perfect block gives a crisp pop. Then decay
+    // and apply the offset to the camera's resting look-at point.
+    for (final event in _frameEvents) {
+      switch (event) {
+        case SwingEvent(shotType: ShotType.smash, :final wasAirborne):
+          _shake.shake(wasAirborne ? _kAirborneSmashShake : _kSmashShake);
+        case BlockEvent(isPerfect: true):
+          _shake.shake(_kPerfectBlockShake);
+        case _:
+          break;
+      }
+    }
+    _shake.update(dt);
+    camera.viewfinder.position = _cameraBase + _shake.offset;
+
     // Recompute the cached view once per render frame (after advancing the
     // driver so alpha is current for this frame's interpolation point).
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
   }
+
+  // Shake peak amplitudes in game units (court is 1280 wide).
+  static const double _kSmashShake = 9;
+  static const double _kAirborneSmashShake = 14;
+  static const double _kPerfectBlockShake = 11;
 
   /// The interpolated render state between the previous and current ticks,
   /// cached once per render frame in [update].
@@ -250,6 +354,12 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   /// call (once per render frame) so repeated reads within a frame return the
   /// identical object without re-lerping.
   RenderState get view => _view;
+
+  /// The camera's current shake displacement from its resting look-at point
+  /// (M2-002/003). Zero when no shake is active. The parallax backdrop reads
+  /// this to drift its layers against the camera for a depth cue.
+  Vector2 get cameraShakeOffset =>
+      isLoaded ? camera.viewfinder.position - _cameraBase : Vector2.zero();
 
   /// The current safe-area insets in game units.
   EdgeInsets get safeArea => _safeArea;
@@ -269,6 +379,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       _scoreHud.safeArea = value;
       _staminaLeft.safeArea = value;
       _staminaRight.safeArea = value;
+      _pauseButton.safeArea = value;
     }
   }
 
@@ -296,10 +407,10 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
 
   /// Restarts the match with fresh seeds, resetting the simulation and AI.
   ///
-  /// Replaces [_simulation] with a new one using [seed], recreates the AI
-  /// with [aiSeed], resets the driver accumulator (so no burst of catch-up
-  /// ticks on the first frame), and recaptures both render snapshots from
-  /// the new initial state.
+  /// Replaces [_simulation] with a new one using [seed], rolls a fresh
+  /// random [AiDifficulty] from [aiSeed] and builds its AI, resets the
+  /// driver accumulator (so no burst of catch-up ticks on the first frame),
+  /// and recaptures both render snapshots from the new initial state.
   ///
   /// Seeds are derived in the game layer from wall-clock time, which is
   /// explicitly allowed outside `lib/engine/` (see CLAUDE.md). The engine
@@ -311,13 +422,18 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       targetScore: _targetScore,
     );
     _simulation.start();
-    _rightAi = BasicAI(side: CourtSide.right, seed: aiSeed);
+    final difficulty = AiDifficulty.roll(aiSeed);
+    _rightAi = difficulty.build(side: CourtSide.right, seed: aiSeed);
+    rightAiDifficulty = difficulty;
     _driver.reset();
     _current = RenderState.capture(_simulation);
     _previous = _current;
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
     _pendingEvents.clear();
     _frameEvents = const [];
+
+    // Re-randomize the opponent character for the new match.
+    rightCharacter = _pickOpponent(seed);
   }
 
   // -- Keyboard input (macOS desktop feel-tuning target) ---------------------
@@ -373,7 +489,10 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
         return true;
       }
       if (key == LogicalKeyboardKey.keyJ) {
-        controls.pressSmash();
+        // Merged jump-smash (M1-036): same semantics as the touch button.
+        controls.pressJumpSmash(
+          airborne: view.leftPlayer.feetY < kGroundY,
+        );
         return true;
       }
       if (key == LogicalKeyboardKey.keyK) {
@@ -388,6 +507,46 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     return false;
   }
 
+  // -- Pause flow (M2-016) ---------------------------------------------------
+
+  /// The Flame overlay id for the full-screen pause menu (no popups: the menu
+  /// covers the whole screen per the design rule).
+  static const String pauseOverlayId = 'pause';
+
+  /// Whether the player paused via the menu (as opposed to an app-background
+  /// pause). Kept so a background→foreground cycle does not silently resume a
+  /// match the player deliberately paused.
+  bool _manuallyPaused = false;
+
+  /// Whether the pause menu is currently showing.
+  bool get isPausedByMenu => _manuallyPaused;
+
+  /// Opens the pause menu and freezes the simulation. Idempotent.
+  void openPauseMenu() {
+    if (_manuallyPaused) return;
+    _manuallyPaused = true;
+    pauseEngine();
+    if (!overlays.isActive(pauseOverlayId)) overlays.add(pauseOverlayId);
+  }
+
+  /// Restarts the match from the pause menu with fresh wall-clock seeds, then
+  /// closes the menu. Wall-clock seeding is game-layer only (see CLAUDE.md).
+  void restartFromMenu() {
+    final base = DateTime.now().millisecondsSinceEpoch;
+    restartMatch(seed: base, aiSeed: base ^ 0xDEADBEEF);
+    closePauseMenu();
+  }
+
+  /// Closes the pause menu and resumes the simulation. Idempotent.
+  void closePauseMenu() {
+    if (!_manuallyPaused) return;
+    _manuallyPaused = false;
+    if (overlays.isActive(pauseOverlayId)) overlays.remove(pauseOverlayId);
+    // Discard banked time so the pause is not simulated as a catch-up burst.
+    _driver.reset();
+    resumeEngine();
+  }
+
   // -- Lifecycle -------------------------------------------------------------
 
   @override
@@ -400,6 +559,9 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       case AppLifecycleState.inactive:
         pauseEngine();
       case AppLifecycleState.resumed:
+        // A deliberately-paused match stays paused across a background cycle;
+        // only auto-resume when the menu is not up.
+        if (_manuallyPaused) return;
         // Discard banked time so the pause duration is not simulated as a
         // spike of catch-up ticks (see FixedTimestepDriver.reset).
         _driver.reset();
@@ -409,4 +571,12 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
         break;
     }
   }
+}
+
+/// The type of characters available in the game.
+enum CharacterType {
+  astronautRed,
+  mukesh,
+  jeff,
+  elon,
 }

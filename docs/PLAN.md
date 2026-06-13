@@ -9,8 +9,8 @@ todos:
     content: "Milestone 1 Platform Hygiene [S]: landscape lock (iOS plist + Android manifest + SystemChrome), app lifecycle auto-pause, git/GitHub + CLAUDE.md conventions"
     status: pending
   - id: milestone-1a
-    content: "Milestone 1A: Engine Core -- [F] fixed-timestep accumulator + tick order + math abstraction + seeded PRNG + perfect-block redefinition; [O] shuttle physics, swept collision, ShotSystem, FSM + serve rules; [S] Player, InputBuffer/Validator, Stamina, Stun, Scoring (incl. golden point), rules gaps (double-hit, behind-player contact, net-cord, stuck shuttle), BalanceConfig + tuning overlay, unit tests"
-    status: pending
+    content: "Milestone 1A: Engine Core -- [F] fixed-timestep accumulator + tick order + math abstraction + seeded PRNG + perfect-block redefinition; [O] shuttle physics, swept collision, ShotSystem, FSM + serve rules; [S] Player, InputBuffer/Validator, Stamina, Stun, Scoring (incl. golden point), rules gaps (double-hit, behind-player contact, net-cord, stuck shuttle), BalanceConfig + tuning overlay, unit tests. DONE: all systems implemented, M1-032 BalanceConfig + debug tuning overlay landed; engine coverage 95%."
+    status: completed
   - id: milestone-1b
     content: "Milestone 1B: Flame Rendering [S] -- BadmintonGame shell (1280x720 letterboxed), RenderState, Court/Player/Shuttle components, touch controls + safe-area/notch + multi-touch, basic HUD"
     status: completed
@@ -199,7 +199,11 @@ Implementation tasks:
 - **M1-016** `[S]`: `ScoringSystem` — configurable target (5/11/21), deuce at target-1, 2-point lead, **cap at target+4** (so 11 -> golden point at 14-14; spec + test explicitly), side-switching OFF by default (tuning flag).
 - **M1-017** `[F]` design / `[O]` impl: `Simulation` — 60 ticks/sec via accumulator (M1-030), ordered systems: InputValidator -> InputBuffer -> PlayerMovement -> ShotSystem -> ShuttlePhysics -> CollisionSystem -> StaminaSystem -> StunSystem -> MatchFSM. Order documented.
 - **M1-018** `[S]`: `MatchErrorHandler` — snapshot + last 60 input frames on unrecoverable error, graceful match termination.
-- **M1-032** `[S]`: `BalanceConfig` from `assets/data/balance.json` + **debug tuning overlay** (sliders for gravity/drag/speeds at runtime) + desktop dev target wired for keyboard play (fast tuning loop).
+- **M1-032** `[S]` (DONE): `BalanceConfig` from `assets/data/balance.json` + **debug tuning overlay** (sliders for gravity/drag/speeds at runtime) + desktop dev target wired for keyboard play (fast tuning loop).
+  - `BalanceConfig` (pure Dart, immutable) holds the **feel** subset — physics coefficients, launch/player speeds, stamina drains; `defaults()` is built straight from the `k*` constants so they can't drift. Structural geometry, shot **angles**, and scoring stay compile-time const (the verified net-clearance math depends on them).
+  - `Tunables` now delegates feel fields to a swappable active config (`Tunables.apply` / `resetToDefaults`), defaulting to `BalanceConfig.defaults()`. Set once before a match → determinism within a match preserved (10k-tick tests unaffected). M3 path: config moves into `GameState`'s snapshot signature for cross-peer agreement.
+  - Game layer: `BalanceLoader` reads `assets/data/balance.json` (engine stays pure — no `rootBundle`), applied in `main()`. `TuningOverlay` (debug-only, stripped from release) is a slide-in slider panel grouped by subsystem; a slider release re-applies the config and restarts the match.
+  - **Feel-tuning to "fun" is the owner's manual gate step** (`flutter run -d macos`, keyboard play). Engine code/tests are in place: coverage 95%, full suite green.
 - **M1-019** `[S]`: Unit tests — determinism over 10k ticks (same seed => identical state hash), swept-collision cases incl. max-speed smash through net plane, FSM valid/invalid transitions, scoring (deuce, golden point 14-14, caps at 5/21 targets), stamina curves, stun boundaries per M1-035 spec, serve faults, double-hit fault, behind-body whiff, stuck-shuttle timeout.
 
 ### 1B -- Flame Rendering
@@ -215,6 +219,12 @@ Implementation tasks:
 - **M1-027** `[S]`: `AIController` interface — deterministic, randomness via a private `GameRandom` owned by the AI (NOT `GameState.random` — the AI's draws must not touch the tick-owned PRNG stream; rollback replays recorded inputs, not the AI, so the stream must be bit-identical on re-execution).
 - **M1-028** `[S]`: `BasicAI` — 15-frame reaction delay, 70/20/10 shot mix.
 - **M1-029** `[S]`: Wire into playable match, tap-to-restart.
+- **M1-028b** `[S]` (DONE): **Three difficulty tiers** pulled forward from M2-022/023 onto a shared `RuleBasedAi` skeleton (serve/rally structure single-sourced):
+  - **easy** — `BasicAI` (above): 15-tick reaction, chases the shuttle's *current* x, 70/20/10 shot mix.
+  - **hard** — `HardAI`: 8-tick reaction, `ShuttlePredictor` trajectory lookahead (walks to the predicted descent x before the shuttle arrives), 50/35/15 mix, net-clearance gate on smashes.
+  - **challenging** — `ChallengingAI` (the M2-023 spec): 3-tick reaction, tight intercept, context-aware shot choice (jump-smash when the geometry clears the net, drop near the net, else clear/drop).
+  - `AiDifficulty.roll(seed)` assigns one tier **at random per match** in the game layer (no difficulty screen yet — that arrives with M2-024); `ShuttlePredictor` is a pure deterministic ghost-integration, drawing from no PRNG.
+  - Note: M2-022 `IntermediateAI` is now the one remaining tier to fill the gap between easy and hard; M2-023 `HardAI` is effectively delivered here (revisit its perfect-block behaviour when `StunSystem` blocking is tuned).
 
 ### MVP Done Criteria
 
@@ -227,7 +237,20 @@ Full match vs AI with all mechanics, deterministic over a fixed seed, landscape-
 ### 2A -- Visual Polish
 
 - **M2-001..005** `[S]`: sprites (8 states), parallax, camera + shake, particles, animation state machine (unchanged from v2).
+  - **M2-003 (camera shake) + M2-004 (particles): DONE** as an art-free "impact juice" PR on the existing `RenderEvent` system. `ScreenShake` controller nudges the camera on smash impact (harder when airborne) and perfect block; `ImpactEffectsComponent` spawns particle bursts (smash sparks, ground dust on landing, net-hit puffs). Both are pure presentation reading `frameEvents` only.
+  - **M2-005 (animation state machine): DONE** — `PlayerAnimator` is a pure, deterministic state machine (idle / run / rise / fall / land / swing / stunned, in that priority) that drives procedural transforms (squash-stretch, forward lean, jump-stretch, landing-squash, an anticipation→follow-through swing arc, stun wobble, breathing/run bob) on the existing character sprites — real, visible animation with **no new art**. `PlayerComponent` derives the state from `PlayerView` facts plus per-frame x/feet-y deltas and applies the pose around the feet pivot.
+  - **M2-002 (parallax): DONE** — `ParallaxBackdropComponent` oversizes the stadium backdrop and drifts it against the camera shake (a fraction, so it reads as farther away) plus a slow idle sway; the floor and net stay world-fixed.
+  - **M2-001 (sprites, 8 states): partial** — players still use the single character sprite driven by `PlayerAnimator`; the **shuttle** now renders as a proper procedural shuttlecock (cork nose + flared feather skirt) oriented cork-first along its velocity with a feather flutter (replacing the plain circle). Full per-state sprite-sheet art for players is still open; `PlayerAnimator` exposes the state + 0..1 swing progress for a future sheet renderer.
+
+### 2A.POC — Perspective court fix + POC polish (NEW)
+
+The flat side-view sim vs. perspective-court art mismatch caused false in/out calls and a "half-court" player look. Fixed without touching the tuned engine:
+
+- **`CourtProjection`** (`lib/game/court_projection.dart`): an affine render-space map (`screen = offset + scale*engine`) applied by the gameplay components (players, shuttle, impact bursts). The engine's play rectangle maps onto the drawn court so the left/right bounds line up with the court edges (in/out now matches what you see) and the ground line lands on the court's mid-depth centre line (players stand on-court, not at the near edge). **No shot re-tuning** — the engine is unchanged; only where its already-correct results draw. Defaults are estimates; a debug **court-alignment overlay** (4 sliders) calibrates live against the art.
+- **Pause menu (M2-016)**: full-screen Flame overlay (no popups) with Resume/Restart; a HUD pause button opens it, the Android back button routes to it (`PopScope`), and a deliberately-paused match survives a background cycle.
+- **Bigger touch buttons (M1-025)**: RALLY/DROP radii bumped (40→54) with a larger primary and font so they clear the 48 dp tap minimum on real phones.
 - **M2-030** `[S]` (NEW): Haptics — `HapticFeedback` on smash impact + perfect block. Cheapest feel win available.
+  - **DONE (smash) / wired-but-dormant (perfect block).** `HapticsComponent` buzzes on every smash connect. The perfect-block buzz/shake/spark is wired end-to-end (engine now emits a `BlockEvent` via `Simulation.lastTickBlocks` → `RenderState.capture`), but is **currently dormant**: a perfectly-timed block swings 6–12 ticks *before* the shuttle is in reach, and `ShotSystem.trySwing` requires reach-now, so a perfect block whiffs and never connects. **Engine gap to close (M1-035/M2-023 follow-up): make an early, perfectly-timed block swing actually return the shuttle** (a pending-block that resolves on arrival). Once that lands, the perfect-block feedback lights up with no presentation changes. Imperfect blocks already connect (and stun); the infra/tests cover that path.
 
 ### 2B -- Audio
 

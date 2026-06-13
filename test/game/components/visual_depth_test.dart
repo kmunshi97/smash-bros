@@ -15,6 +15,7 @@ import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/components/components.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   Future<BadmintonGame> buildGame({int seed = 7}) =>
       initializeGame(() => BadmintonGame(seed: seed));
 
@@ -253,42 +254,54 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // Part D — action button arc layout
+  // Part D — action button tray layout (M1-036)
   // ---------------------------------------------------------------------------
 
-  group('ActionButtonsComponent — arc layout', () {
-    test('four buttons are present after onLoad', () async {
-      final game = await buildGame();
-      final abc = game.camera.viewport.children
-          .whereType<ActionButtonsComponent>()
-          .first;
-      // ActionButtonsComponent has 4 children (_ActionButton instances are
-      // PositionComponent subclasses).
-      expect(
-        abc.children.length,
-        4,
-        reason:
-            'ActionButtonsComponent must add exactly 4 buttons (PRIMARY, JUMP, '
-            'DROP, CLEAR)',
-      );
-      game.onRemove();
-    });
-
+  group('ActionButtonsComponent — tray layout', () {
     test(
-      'primary (SMASH/TOSS) button is innermost — closest to corner anchor',
+      'boot while serving: exactly one button (TOSS) after onLoad',
       () async {
         final game = await buildGame();
-        game.update(0); // let update() position buttons
+        final abc = game.camera.viewport.children
+            .whereType<ActionButtonsComponent>()
+            .first;
+        // Boot state is servePending with the left (local) player serving, so
+        // only the TOSS button is mounted (M1-036 serve-state visibility).
+        expect(
+          abc.children.length,
+          1,
+          reason:
+              'ActionButtonsComponent must show only the TOSS button while the '
+              'local player is serving',
+        );
+        game.onRemove();
+      },
+    );
+
+    test(
+      'rally: primary (JUMP&SMASH) button is innermost — closest to corner',
+      () async {
+        final game = await buildGame();
+
+        // Advance past servePending by tossing, then pump updates so the
+        // rally buttons mount (component sees the new view one frame late;
+        // queued additions mount on the following lifecycle pass).
+        game.controls.tossHeld = true;
+        game.update(kTickDuration);
+        game.controls.tossHeld = false;
+        for (var i = 0; i < 3; i++) {
+          game.update(kTickDuration);
+        }
 
         final abc = game.camera.viewport.children
             .whereType<ActionButtonsComponent>()
             .first;
+        expect(abc.children.length, 3, reason: 'rally state mounts 3 buttons');
 
-        final viewportSize = game.camera.viewport.size;
-        // Corner anchor: bottom-right of viewport (edge margin applied in
-        // component, but here we just need the relative ordering).
-        final cornerX = viewportSize.x;
-        final cornerY = viewportSize.y;
+        // Corner anchor in VIRTUAL coordinates (viewport children render in
+        // the 1280×720 virtual space, not device coordinates).
+        const cornerX = kCourtWidth;
+        const cornerY = kCourtHeight;
 
         // Compute distance of each button's centre from the corner.
         double distFromCorner(PositionComponent btn) {

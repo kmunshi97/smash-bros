@@ -1,4 +1,4 @@
-// LocalControlState unit tests (M1-025, updated M1-034).
+// LocalControlState unit tests (M1-025, updated M1-034, M1-036 jump-smash).
 // Tests the level-vs-edge semantics documented in the class header.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smash_bros/engine/input/input_action.dart';
@@ -173,5 +173,184 @@ void main() {
       final c = LocalControlState();
       expect(c.drainTick(), InputAction.none);
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // pressJumpSmash — delayed one-shot semantics (M1-036)
+  // ---------------------------------------------------------------------------
+
+  group('LocalControlState — pressJumpSmash', () {
+    test(
+      'grounded: jump bit on the very next drain (drain 0)',
+      () {
+        final c = LocalControlState()..pressJumpSmash(airborne: false);
+        final drain0 = c.drainTick();
+        expect(
+          InputAction.has(drain0, InputAction.jump),
+          isTrue,
+          reason:
+              'jump bit must be set on the first drain after grounded press',
+        );
+      },
+    );
+
+    test(
+      'grounded: NO smash bit on drain 0 (smash delayed)',
+      () {
+        final c = LocalControlState()..pressJumpSmash(airborne: false);
+        final drain0 = c.drainTick();
+        expect(
+          InputAction.has(drain0, InputAction.smash),
+          isFalse,
+          reason: 'smash must not fire on the same drain as the jump',
+        );
+      },
+    );
+
+    test(
+      'grounded: smash bit fires exactly on drain kJumpSmashApexDelayTicks',
+      () {
+        // Drain 0 carries the jump bit (already tested above) and starts the
+        // countdown; advance through [kJumpSmashApexDelayTicks - 1] more
+        // drains without seeing a smash.
+        final c = LocalControlState()
+          ..pressJumpSmash(airborne: false)
+          ..drainTick();
+        for (var i = 1; i < kJumpSmashApexDelayTicks; i++) {
+          final bits = c.drainTick();
+          expect(
+            InputAction.has(bits, InputAction.smash),
+            isFalse,
+            reason: 'smash must NOT fire before the apex (drain $i)',
+          );
+        }
+
+        // Drain kJumpSmashApexDelayTicks: smash must fire now.
+        final apexDrain = c.drainTick();
+        expect(
+          InputAction.has(apexDrain, InputAction.smash),
+          isTrue,
+          reason:
+              'smash must fire exactly on drain kJumpSmashApexDelayTicks '
+              '(= $kJumpSmashApexDelayTicks)',
+        );
+      },
+    );
+
+    test(
+      'grounded: NO smash bit on the drain after the apex (countdown reset)',
+      () {
+        final c = LocalControlState()..pressJumpSmash(airborne: false);
+
+        for (var i = 0; i <= kJumpSmashApexDelayTicks; i++) {
+          c.drainTick();
+        }
+        // One drain after the apex — countdown is -1, no smash.
+        final afterApex = c.drainTick();
+        expect(
+          InputAction.has(afterApex, InputAction.smash),
+          isFalse,
+          reason: 'smash must not fire again after the apex drain',
+        );
+      },
+    );
+
+    test(
+      'grounded: countdown survives across many drains unchanged',
+      () {
+        // Verify the countdown is monotonically decreasing and doesn't jump.
+        // Drain 0 (in the cascade) fires the jump and starts the countdown.
+        final c = LocalControlState()
+          ..pressJumpSmash(airborne: false)
+          ..drainTick();
+        var smashFiredCount = 0;
+        for (var i = 0; i < kJumpSmashApexDelayTicks + 5; i++) {
+          final bits = c.drainTick();
+          if (InputAction.has(bits, InputAction.smash)) smashFiredCount++;
+        }
+        expect(smashFiredCount, 1, reason: 'smash must fire exactly once');
+      },
+    );
+
+    test(
+      'airborne: smash fires on the very next drain, no jump bit',
+      () {
+        final c = LocalControlState()..pressJumpSmash(airborne: true);
+        final drain0 = c.drainTick();
+        expect(
+          InputAction.has(drain0, InputAction.smash),
+          isTrue,
+          reason: 'airborne press must fire smash immediately',
+        );
+        expect(
+          InputAction.has(drain0, InputAction.jump),
+          isFalse,
+          reason: 'no jump bit when already airborne',
+        );
+      },
+    );
+
+    test(
+      'airborne: smash cleared after first drain',
+      () {
+        // The first drain (in the cascade) consumes the smash.
+        final c = LocalControlState()
+          ..pressJumpSmash(airborne: true)
+          ..drainTick();
+        expect(
+          InputAction.has(c.drainTick(), InputAction.smash),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      're-press while countdown active is ignored (no stack/reset)',
+      () {
+        // Drain 0: jump fires, countdown starts. The second press lands
+        // mid-countdown and must be silently ignored.
+        final c = LocalControlState()
+          ..pressJumpSmash(airborne: false)
+          ..drainTick()
+          ..pressJumpSmash(airborne: false);
+
+        // Drain through to apex, counting smash fires.
+        var smashCount = 0;
+        // We already consumed drain 0, so iterate kJumpSmashApexDelayTicks more.
+        for (var i = 0; i < kJumpSmashApexDelayTicks + 1; i++) {
+          final bits = c.drainTick();
+          if (InputAction.has(bits, InputAction.smash)) smashCount++;
+        }
+        expect(
+          smashCount,
+          1,
+          reason: 're-press mid-countdown must not stack or reset the combo',
+        );
+      },
+    );
+
+    test(
+      're-press while countdown active: no extra jump bit issued',
+      () {
+        final c = LocalControlState()..pressJumpSmash(airborne: false);
+        final drain0 = c.drainTick(); // consumes jump
+
+        // Second press while counting down.
+        c.pressJumpSmash(airborne: false);
+        final drain1 = c.drainTick();
+
+        // drain0 already consumed the jump; drain1 must not reissue it.
+        expect(
+          InputAction.has(drain0, InputAction.jump),
+          isTrue,
+          reason: 'jump on drain 0',
+        );
+        expect(
+          InputAction.has(drain1, InputAction.jump),
+          isFalse,
+          reason: 'no extra jump from ignored re-press',
+        );
+      },
+    );
   });
 }

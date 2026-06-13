@@ -155,6 +155,25 @@ final class SwingEvent extends RenderEvent {
   final bool wasAirborne;
 }
 
+/// A defender blocked an incoming smash this tick (M2-030).
+///
+/// Produced from a `BlockResult` in [RenderState.capture]. Accompanies the
+/// defender's [SwingEvent]; it carries the block *quality* so the presentation
+/// layer can distinguish a satisfying perfect block from a fumbled one
+/// (haptics, screen flash, stun stars).
+@immutable
+final class BlockEvent extends RenderEvent {
+  /// Creates a block event for [side]'s defender.
+  const BlockEvent({required this.side, required this.isPerfect});
+
+  /// The court side of the defender who blocked.
+  final CourtSide side;
+
+  /// Whether the block was perfectly timed (clean full-power counter) versus
+  /// imperfect (weak pop-up; the defender is stunned).
+  final bool isPerfect;
+}
+
 /// The shuttle reached the ground this tick.
 ///
 /// Produced from a [GroundHit] in [RenderState.capture].
@@ -269,7 +288,9 @@ final class RenderState {
     final fsm = state.fsm;
     final sb = fsm.scoreboard;
 
-    // Map swings → SwingEvent (in order).
+    // Map swings → SwingEvent (in order), then blocks → BlockEvent. A block's
+    // SwingEvent comes first (the defender's swing), then the BlockEvent that
+    // qualifies it — the presentation layer reads both.
     final events = <RenderEvent>[
       for (final sw in sim.lastTickSwings)
         SwingEvent(
@@ -277,6 +298,8 @@ final class RenderState {
           shotType: sw.shotType,
           wasAirborne: sw.wasAirborne,
         ),
+      for (final block in sim.lastTickBlocks)
+        BlockEvent(side: block.side, isPerfect: block.isPerfect),
       // Map collision events → the appropriate RenderEvent subclass (in order).
       for (final col in sim.lastTickCollisions)
         switch (col) {

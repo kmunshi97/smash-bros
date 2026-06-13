@@ -7,108 +7,60 @@ import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/entities/player.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
-import 'package:smash_bros/engine/systems/shot_system.dart';
+import 'package:smash_bros/game/animation/player_animator.dart';
 import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
 // ---------------------------------------------------------------------------
-// PlayerComponent — M1-023 (reskinned M1-027, depth + swing pass M1-035v)
+// PlayerComponent — M1-023c sprite characters
+//   (based on M1-023, M1-027, M1-035v, M1-023b)
 //
-// Draws one player (left or right side) as a cartoon "big-head" character:
-//   • Drop shadow ellipse at kGroundY, fading as the player rises (depth cue).
-//   • Large head circle (80 diameter) centred near the top of the hitbox,
-//     with skin tone, eyes (white + pupil), and a coloured headband strip.
-//   • Short rounded torso (team colour) below the head.
-//   • Two shoe ellipses at the feet (dark).
-//   • Racquet animated through a swing arc over 12 render frames when a
-//     SwingEvent is received for this component's side. While not swinging,
-//     the racquet rests at the static shoulder position.
-//   • Impact flash (white starburst, 4 lines) on the first 3 frames of swing.
-//   • Stun flash overlay (white blink) + 3 dizzy stars arcing above the head.
+// Draws one player as a full-character sprite (racquet baked into the art).
+// The local player is always the red astronaut; the opponent is one of three
+// parody tycoon sprites picked per match in BadmintonGame. Painter's order:
+//   0. Drop shadow ellipse at kGroundY (fades/shrinks with jump height).
+//   1. Character sprite — aspect-scaled to the 150-unit hitbox height,
+//      feet-anchored, horizontally flipped to match PlayerView.facing, with a
+//      translucent white tint on stun blink frames.
+//   2. Dizzy stars — 3 stars arc above the character while stunned.
+//
+// A SwingEvent still drives the [isSwinging]/[swingFrame] counters (consumed
+// by tests today; sprite-sheet swing animations arrive with M2-001 and will
+// read the same counters).
 //
 // Tick-order position: rendered after CourtComponent, before ShuttleComponent.
 // ---------------------------------------------------------------------------
 
-// Geometry-rebalance: all proportions sized for the 150-unit-tall, 60-wide
-// hitbox. The big-head look puts the head at ~53% of total height (the
-// reference style is roughly head-half, body-half).
-
-// Head geometry (game units).
-const double _kHeadDiameter = 80;
-const double _kHeadRadius = _kHeadDiameter / 2;
-// Head centre is at feetY − _kHeadCentreFromFeet units above feet. The head
-// occupies the top of the hitbox: top of head = 110 + 40 = 150 = hitbox top.
-const double _kHeadCentreFromFeet = 110;
-
-// Headband geometry.
-const double _kHeadbandH = 14;
-const double _kHeadbandOffsetFromHeadCentre = 10; // y offset from head centre
-
-// Eye geometry.
-const double _kEyeRadius = 10;
-const double _kPupilRadius = 6;
-const double _kEyeOffsetX = 15; // half-distance between the two eyes
-const double _kEyeOffsetY = 6; // upward offset from head centre
-
-// Torso geometry.
-const double _kTorsoW = 40;
-const double _kTorsoH = 60;
-// Torso top = head bottom (feetY − 70).
-const double _kTorsoTopFromFeet = _kHeadCentreFromFeet - _kHeadRadius;
-
-// Shoe geometry.
-const double _kShoeW = 24;
-const double _kShoeH = 10;
-
-// Racquet geometry — drawn at shoulder height, swings through an arc.
-const double _kRacquetOvalW = 20;
-const double _kRacquetOvalH = 30;
-const double _kRacquetHandleLen = 22; // handle length from shoulder to frame
-const double _kRacquetHandleW = 4;
-const double _kRacquetFromFeet = 85; // shoulder vertical position above feet
-
-// Swing animation geometry (in radians; 0 = pointing straight up from shoulder).
-// Normal swing: back position −60°, follow-through +75°.
-const double _kSwingBackNormal = -60 * math.pi / 180;
-const double _kSwingFollowNormal = 75 * math.pi / 180;
-// Smash/airborne: wider arc.
-const double _kSwingBackSmash = -90 * math.pi / 180;
-const double _kSwingFollowSmash = 80 * math.pi / 180;
-// Drop shot: gentler arc.
-const double _kSwingBackDrop = -40 * math.pi / 180;
-const double _kSwingFollowDrop = 55 * math.pi / 180;
-
-// Swing animation duration in render frames (~12 ticks at 60 Hz).
+// Swing animation duration in render frames (counter only; see header).
 const int _kSwingDuration = 12;
-// Impact flash duration (frames from swing start).
-const int _kFlashDuration = 3;
-// Impact flash geometry.
-const int _kFlashLineCount = 5;
-const double _kFlashLineLen = 10;
 
+// ---------------------------------------------------------------------------
 // Drop shadow geometry.
-const double _kShadowW = 50; // full width of shadow ellipse at ground
-const double _kShadowH = 12; // height of shadow ellipse at ground
+// ---------------------------------------------------------------------------
+const double _kShadowW = 56;
+const double _kShadowH = 14;
 
-// Dizzy star geometry (stun effect).
+// ---------------------------------------------------------------------------
+// Dizzy star geometry (stun effect). Stars orbit above the bean dome.
+// ---------------------------------------------------------------------------
 const double _kStarRadius = 7;
 const int _kStarCount = 3;
 const double _kStarOrbitRadius = 30;
-const double _kStarOrbitOffsetY = 20; // above head centre
 
-/// Renders one player avatar as a cartoon big-head character.
+/// Renders one player avatar as a full-character sprite.
 ///
 /// Responsibilities (pure presentation — no game logic):
 ///  * Each [update] reads the matching [PlayerView] from [BadmintonGame.view]
-///    and sets [position] so the hitbox rect (60 x 150) is anchored at the
-///    player's feet (top-left = (x - 30, feetY - 150)).
+///    and sets [position] so the hitbox rect (60 × 150) is anchored at the
+///    player's feet (top-left = (x − 30, feetY − 150)).
 ///  * [update] also scans [BadmintonGame.frameEvents] for a [SwingEvent]
-///    matching this component's [side] and starts a 12-frame swing animation.
-///  * [render] draws the cartoon character in painter's order: shadow, shoes,
-///    torso, head, eyes, racquet (animated or static), stun FX.
+///    matching this component's [side] and restarts the 12-frame swing
+///    counter (consumed by tests today; sprite swing animations land in M2).
+///  * [render] draws: drop shadow, then the character sprite (aspect-scaled
+///    to hitbox height, feet-anchored, flipped to match facing), then stun FX.
 ///  * Drop shadow fades/shrinks as the player rises (scale by 1 − jumpFraction).
-///  * When [PlayerView.isStunned], a stun-flash blinks every 8 render frames
-///    AND 3 dizzy stars arc above the head.
+///  * When [PlayerView.isStunned], the sprite blinks with a translucent white
+///    tint every 8 render frames AND 3 dizzy stars arc above the character.
 ///
 /// One [PlayerComponent] instance is created per [CourtSide].
 class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
@@ -118,49 +70,28 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
   /// Which court side this component tracks.
   final CourtSide side;
 
-  // Body paint — team colour.
-  late final Paint _bodyPaint = Paint()
-    ..color = side == CourtSide.left
-        ? GamePalette.leftPlayer
-        : GamePalette.rightPlayer;
-
-  // Skin tone paint per side.
-  late final Paint _skinPaint = Paint()
-    ..color = side == CourtSide.left
-        ? GamePalette.skinToneLeft
-        : GamePalette.skinToneRight;
-
-  // Headband paint per side.
-  late final Paint _headbandPaint = Paint()
-    ..color = side == CourtSide.left
-        ? GamePalette.headbandLeft
-        : GamePalette.headbandRight;
-
-  static final _eyeWhitePaint = Paint()..color = GamePalette.eyeWhite;
-  static final _pupilPaint = Paint()..color = GamePalette.eyePupil;
-  static final _shoePaint = Paint()..color = GamePalette.shoeColor;
-  static final _stunPaint = Paint()..color = GamePalette.stunFlash;
+  // Stun / dizzy.
   static final _dizzyStarPaint = Paint()..color = GamePalette.dizzyStarColor;
-  static final _flashPaint = Paint()
-    ..color = const Color(0xFFFFFFFF)
-    ..strokeWidth = 2.5
-    ..style = PaintingStyle.stroke;
-
-  // Racquet outline — team colour stroke.
-  late final Paint _racquetOutlinePaint = Paint()
-    ..color = side == CourtSide.left
-        ? GamePalette.leftPlayer
-        : GamePalette.rightPlayer
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = 2.5;
 
   // Stun-blink state: purely cosmetic frame counter.
   int _blinkCounter = 0;
 
   // Swing animation state.
   int _swingFrame = _kSwingDuration; // >= _kSwingDuration means not swinging
-  double _swingBackAngle = _kSwingBackNormal;
-  double _swingFollowAngle = _kSwingFollowNormal;
+
+  // Procedural animation state machine (M2-005) and the per-frame facts it
+  // needs that aren't in a single PlayerView (movement / vertical direction
+  // are derived from the deltas between frames).
+  final PlayerAnimator _animator = PlayerAnimator();
+  double _prevX = 0;
+  double _prevFeetY = 0;
+  bool _hasPrev = false;
+
+  /// The current animation state (drives the procedural pose).
+  ///
+  /// Exposed for testing.
+  @visibleForTesting
+  PlayerAnimState get animState => _animator.state;
 
   /// Whether this component is currently playing a swing animation.
   ///
@@ -179,7 +110,7 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
 
   /// Current position of this component in game-unit world space.
   ///
-  /// Top-left of the hitbox rect: (x - 30, feetY - 150).
+  /// Top-left of the hitbox rect: (x − 30, feetY − 150).
   Vector2 position = Vector2.zero();
 
   @override
@@ -201,24 +132,32 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
     // Check for a SwingEvent matching this side in frameEvents.
     for (final event in game.frameEvents) {
       if (event is SwingEvent && event.side == side) {
-        _startSwing(event.shotType, event.wasAirborne);
+        _swingFrame = 0; // restart the swing counter (see header comment)
         break; // only one swing per frame
       }
     }
-  }
 
-  void _startSwing(ShotType shotType, bool wasAirborne) {
-    _swingFrame = 0;
-    if (wasAirborne || shotType == ShotType.smash) {
-      _swingBackAngle = _kSwingBackSmash;
-      _swingFollowAngle = _kSwingFollowSmash;
-    } else if (shotType == ShotType.drop) {
-      _swingBackAngle = _kSwingBackDrop;
-      _swingFollowAngle = _kSwingFollowDrop;
-    } else {
-      _swingBackAngle = _kSwingBackNormal;
-      _swingFollowAngle = _kSwingFollowNormal;
-    }
+    // -- Drive the procedural animation state machine (M2-005) ----------------
+    // Movement and vertical direction come from the deltas between frames; the
+    // rest of the facts are read straight off the player view.
+    const moveEps = 0.01;
+    final moving = _hasPrev && (pv.x - _prevX).abs() > moveEps;
+    // +y is down, so a decreasing feetY means the player is gaining height.
+    final rising = _hasPrev && pv.feetY < _prevFeetY - moveEps;
+    final swing01 = _swingFrame < _kSwingDuration
+        ? _swingFrame / _kSwingDuration
+        : -1.0;
+    _animator.update(
+      dt,
+      stunned: pv.isStunned,
+      airborne: pv.isAirborne,
+      rising: rising,
+      moving: moving,
+      swing01: swing01,
+    );
+    _prevX = pv.x;
+    _prevFeetY = pv.feetY;
+    _hasPrev = true;
   }
 
   @override
@@ -226,15 +165,17 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
     final pv = _playerView;
     if (pv == null) return;
 
-    // Convenience aliases.
+    // Project the whole avatar (shadow, sprite, stun FX) from engine space onto
+    // the drawn perspective court (M2 POC). Everything below draws in engine
+    // coordinates; the projection maps it to the visible court.
+    canvas.save();
+    game.courtProjection.applyToCanvas(canvas);
+
     final feetY = pv.feetY;
     final centreX = pv.x;
     final facingRight = pv.facing == Facing.right;
 
     // -- 0. Drop shadow at kGroundY (depth cue) --------------------------------
-    // The shadow fades and shrinks as the player rises. Scale = 1 when on the
-    // ground, 0 when at the jump apex. Derived from feetY vs kGroundY and
-    // kPlayerJumpHeight.
     final jumpFraction = ((kGroundY - feetY) / kPlayerJumpHeight).clamp(
       0.0,
       1.0,
@@ -255,193 +196,99 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
       );
     }
 
-    // -- 1. Shoes at feet -----------------------------------------------------
-    canvas
-      ..drawOval(
-        Rect.fromCenter(
-          center: Offset(centreX - 8, feetY - _kShoeH / 2),
-          width: _kShoeW,
-          height: _kShoeH,
-        ),
-        _shoePaint,
-      )
-      ..drawOval(
-        Rect.fromCenter(
-          center: Offset(centreX + 8, feetY - _kShoeH / 2),
-          width: _kShoeW,
-          height: _kShoeH,
-        ),
-        _shoePaint,
-      );
+    // -- 1. Character Sprite --------------------------------------------------
+    // Determine the active character type
+    final character = side == CourtSide.left
+        ? game.leftCharacter
+        : game.rightCharacter;
 
-    // -- 2. Torso (rounded rect, team colour) ----------------------------------
-    final torsoTop = feetY - _kTorsoTopFromFeet - _kTorsoH;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          centreX - _kTorsoW / 2,
-          torsoTop,
-          _kTorsoW,
-          _kTorsoH,
-        ),
-        const Radius.circular(6),
-      ),
-      _bodyPaint,
-    );
-
-    // -- 3. Head + 4. Headband (clipped to head circle) ----------------------
-    final headCy = feetY - _kHeadCentreFromFeet;
-    canvas
-      ..drawCircle(Offset(centreX, headCy), _kHeadRadius, _skinPaint)
-      ..save()
-      ..clipPath(
-        Path()..addOval(
-          Rect.fromCircle(
-            center: Offset(centreX, headCy),
-            radius: _kHeadRadius,
-          ),
-        ),
-      )
-      ..drawRect(
-        Rect.fromLTWH(
-          centreX - _kHeadRadius,
-          headCy - _kHeadbandOffsetFromHeadCentre - _kHeadbandH / 2,
-          _kHeadDiameter,
-          _kHeadbandH,
-        ),
-        _headbandPaint,
-      )
-      ..restore();
-
-    // -- 5. Eyes (two circles, pupils look toward facing direction) -----------
-    final pupilShift = facingRight ? 1.5 : -1.5;
-    final eyeY = headCy - _kEyeOffsetY;
-    // All four eye circles in one cascade.
-    canvas
-      ..drawCircle(
-        Offset(centreX - _kEyeOffsetX, eyeY),
-        _kEyeRadius,
-        _eyeWhitePaint,
-      )
-      ..drawCircle(
-        Offset(centreX - _kEyeOffsetX + pupilShift, eyeY),
-        _kPupilRadius,
-        _pupilPaint,
-      )
-      ..drawCircle(
-        Offset(centreX + _kEyeOffsetX, eyeY),
-        _kEyeRadius,
-        _eyeWhitePaint,
-      )
-      ..drawCircle(
-        Offset(centreX + _kEyeOffsetX + pupilShift, eyeY),
-        _kPupilRadius,
-        _pupilPaint,
-      );
-
-    // -- 6. Racquet (animated swing or static rest position) ------------------
-    _drawRacquet(canvas, feetY, centreX, facingRight);
-
-    // -- 7. Stun flash overlay (blink every 8 frames) -------------------------
-    if (pv.isStunned && (_blinkCounter ~/ 8).isEven) {
-      canvas.drawCircle(Offset(centreX, headCy), _kHeadRadius, _stunPaint);
+    // Retrieve cached sprite from the game instance
+    final Sprite sprite;
+    switch (character) {
+      case CharacterType.astronautRed:
+        sprite = game.astronautRedSprite;
+      case CharacterType.mukesh:
+        sprite = game.mukeshSprite;
+      case CharacterType.jeff:
+        sprite = game.jeffSprite;
+      case CharacterType.elon:
+        sprite = game.elonSprite;
     }
 
-    // -- 8. Dizzy stars (3 stars arcing above head while stunned) -------------
+    // Red Astronaut, Mukesh, and Jeff face LEFT by default in their sprites.
+    // Elon faces RIGHT by default.
+    final spriteFacesLeftByDefault = character != CharacterType.elon;
+    final shouldFlip = facingRight == spriteFacesLeftByDefault;
+
+    // Maintain aspect ratio relative to the simulation hitbox height (150).
+    final ratio = sprite.src.width / sprite.src.height;
+    const visualHeight = kPlayerHitboxHeight; // 150
+    final visualWidth = visualHeight * ratio;
+
+    canvas.save();
+
+    // -- Procedural animation pose (M2-005) -----------------------------------
+    // Rotate + squash/stretch around the feet pivot (feet stay planted), then
+    // the horizontal flip below mirrors it to match facing. bobY shifts the
+    // sprite vertically. Applied before the flip so the same pose reads
+    // consistently for both facings.
+    final pose = _animator.pose;
+    canvas
+      ..translate(centreX, feetY)
+      ..rotate(pose.rotation)
+      ..scale(pose.scaleX, pose.scaleY)
+      ..translate(-centreX, -feetY);
+
+    // Apply horizontal flip if the facing direction does not match the default
+    if (shouldFlip) {
+      canvas
+        ..translate(centreX, 0)
+        ..scale(-1, 1)
+        ..translate(-centreX, 0);
+    }
+
+    // Position character so that the feet anchor is centered horizontally
+    // and sits exactly at feetY. The pose's vertical bob shifts the sprite.
+    final left = centreX - visualWidth / 2;
+    final top = feetY - visualHeight + pose.bobY;
+
+    // Apply a translucent white tint if stunned and on a blink frame
+    final Paint? overridePaint;
+    if (pv.isStunned && (_blinkCounter ~/ 8).isEven) {
+      overridePaint = Paint()
+        ..colorFilter = const ColorFilter.mode(
+          Color(0x80FFFFFF),
+          BlendMode.srcATop,
+        );
+    } else {
+      overridePaint = null;
+    }
+
+    sprite.render(
+      canvas,
+      position: Vector2(left, top),
+      size: Vector2(visualWidth, visualHeight),
+      overridePaint: overridePaint,
+    );
+
+    canvas.restore();
+
+    // -- 2. Dizzy stars (3 stars arcing above the character while stunned) ----
     if (pv.isStunned) {
-      final angleOffset = _blinkCounter * 0.08; // radians per frame
+      final angleOffset = _blinkCounter * 0.08;
+      final orbitCX = centreX;
+      // Position orbit above the character height (visualHeight = 150)
+      final orbitCY = feetY - visualHeight - 20;
       for (var i = 0; i < _kStarCount; i++) {
         final angle = angleOffset + i * (2 * math.pi / _kStarCount);
-        final starX = centreX + math.cos(angle) * _kStarOrbitRadius;
-        final starY =
-            headCy -
-            _kStarOrbitOffsetY +
-            math.sin(angle) * (_kStarOrbitRadius * 0.5);
+        final starX = orbitCX + math.cos(angle) * _kStarOrbitRadius;
+        final starY = orbitCY + math.sin(angle) * (_kStarOrbitRadius * 0.5);
         _drawStar(canvas, starX, starY, _kStarRadius, _dizzyStarPaint);
       }
     }
-  }
 
-  // Draws the racquet — animated through a swing arc if swinging, or at the
-  // static rest position otherwise.
-  //
-  // The racquet pivots around the shoulder point. Angle 0 = arm pointing
-  // straight up from shoulder; positive = clockwise (toward the ground on the
-  // right side). For the left-facing player the angles are mirrored.
-  void _drawRacquet(
-    Canvas canvas,
-    double feetY,
-    double centreX,
-    bool facingRight,
-  ) {
-    // Shoulder position (the pivot for the swing arc).
-    final shoulderX = facingRight
-        ? centreX + _kTorsoW / 2
-        : centreX - _kTorsoW / 2;
-    final shoulderY = feetY - _kRacquetFromFeet;
-
-    // Compute the current racquet angle.
-    double racquetAngle;
-    if (_swingFrame < _kSwingDuration) {
-      // Swing in progress — ease-out: t*(2−t).
-      final t = _swingFrame / _kSwingDuration;
-      final eased = t * (2 - t);
-      racquetAngle =
-          _swingBackAngle + (_swingFollowAngle - _swingBackAngle) * eased;
-    } else {
-      // Static rest: racquet points slightly outward from shoulder.
-      racquetAngle = facingRight ? 15 * math.pi / 180 : -15 * math.pi / 180;
-    }
-
-    // Mirror angle for left-facing player (facing left means racquet is on the
-    // left side, angles are negated).
-    final signedAngle = facingRight ? racquetAngle : -racquetAngle;
-
-    // The racquet frame centre is at the end of the handle from shoulder.
-    // Angle 0 = up (negative y), so sin/cos components:
-    //   dx = sin(signedAngle) * handle (toward +x when angle > 0)
-    //   dy = -cos(signedAngle) * handle (upward when angle ~ 0)
-    final handleEndX = shoulderX + math.sin(signedAngle) * _kRacquetHandleLen;
-    final handleEndY = shoulderY - math.cos(signedAngle) * _kRacquetHandleLen;
-
-    // Draw handle.
-    final handlePaint = Paint()
-      ..color = GamePalette.shoeColor
-      ..strokeWidth = _kRacquetHandleW
-      ..style = PaintingStyle.stroke;
-
-    canvas
-      ..save()
-      ..drawLine(
-        Offset(shoulderX, shoulderY),
-        Offset(handleEndX, handleEndY),
-        handlePaint,
-      )
-      // Draw racquet head (oval) — centred at handle end, rotated with swing.
-      // Use canvas transform so the oval aligns with the swing direction.
-      ..translate(handleEndX, handleEndY)
-      ..rotate(signedAngle)
-      ..drawOval(
-        Rect.fromCenter(
-          center: Offset.zero,
-          width: _kRacquetOvalW,
-          height: _kRacquetOvalH,
-        ),
-        _racquetOutlinePaint,
-      )
-      ..restore();
-
-    // -- Impact flash on first _kFlashDuration frames of swing ----------------
-    if (_swingFrame < _kFlashDuration) {
-      for (var i = 0; i < _kFlashLineCount; i++) {
-        final a = signedAngle + (i * 2 * math.pi / _kFlashLineCount);
-        final fx1 = handleEndX + math.sin(a) * 4;
-        final fy1 = handleEndY - math.cos(a) * 4;
-        final fx2 = handleEndX + math.sin(a) * (4 + _kFlashLineLen);
-        final fy2 = handleEndY - math.cos(a) * (4 + _kFlashLineLen);
-        canvas.drawLine(Offset(fx1, fy1), Offset(fx2, fy2), _flashPaint);
-      }
-    }
+    // Close the court projection opened at the top of render().
+    canvas.restore();
   }
 
   /// Draws a 5-pointed star centred at ([cx],[cy]) with outer [radius].
