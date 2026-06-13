@@ -1,3 +1,4 @@
+import 'package:smash_bros/engine/balance/balance_config.dart';
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/math/fix.dart';
 
@@ -10,7 +11,42 @@ import 'package:smash_bros/engine/math/fix.dart';
 /// code reference the wrapped value. This is the single sanctioned
 /// double-to-[Fix] boundary for entities — no other engine file should call
 /// [Fix.of] on a gameplay constant.
+///
+/// ## Two kinds of value (M1-032)
+///
+/// * **Structural** geometry, hitbox sizes, shot **angles**, and scoring stay
+///   `static const Fix` — they are fixed by the verified net-clearance math
+///   and are never slider-tuned.
+/// * **Feel** parameters (gravity, drags, launch/player speeds, stamina
+///   drains) are getters that read the active [BalanceConfig] applied via
+///   [apply]. They start at [BalanceConfig.defaults] (built straight from the
+///   `k*` constants) so behaviour is identical until the game layer loads
+///   `assets/data/balance.json` or the debug overlay tunes a value.
+///
+/// The active config is set **once before a match** and never mutated
+/// mid-match, so determinism within a match is preserved (see
+/// `BalanceConfig`).
 abstract final class Tunables {
+  /// The active feel config. Defaults to the shipped values; the game layer
+  /// replaces it via [apply] after loading the balance asset, and the debug
+  /// tuning overlay replaces it again on each slider change + match restart.
+  static BalanceConfig _config = const BalanceConfig.defaults();
+
+  /// The currently active feel config (read by the overlay to seed sliders).
+  static BalanceConfig get config => _config;
+
+  /// Applies [config] as the active feel config.
+  ///
+  /// Call **before** constructing the `Simulation` for a match (or restart the
+  /// match immediately after) — changing it mid-match would alter physics
+  /// between ticks and is not supported. Named as a verb (not a setter)
+  /// because at call sites "apply this balance" reads as an event.
+  // ignore: use_setters_to_change_properties
+  static void apply(BalanceConfig config) => _config = config;
+
+  /// Restores the shipped defaults. Tests that mutate the config via [apply]
+  /// must call this in tear-down to avoid leaking config into other tests.
+  static void resetToDefaults() => _config = const BalanceConfig.defaults();
   // -- Court ----------------------------------------------------------------
 
   /// The x coordinate of the net (centre of the court).
@@ -44,6 +80,9 @@ abstract final class Tunables {
 
   // -- Player ---------------------------------------------------------------
 
+  /// Horizontal movement speed in game units per tick (feel — tunable).
+  static Fix get playerSpeed => Fix.of(_config.playerSpeed);
+
   /// Player hitbox width in game units.
   static const Fix playerHitboxWidth = Fix.of(kPlayerHitboxWidth);
 
@@ -60,8 +99,8 @@ abstract final class Tunables {
   /// (and upward), in game units.
   static const Fix racquetReach = Fix.of(kRacquetReach);
 
-  /// Speed multiplier applied to an airborne smash (the jump smash).
-  static const Fix jumpSmashBonus = Fix.of(kJumpSmashBonus);
+  /// Speed multiplier applied to an airborne smash (the jump smash) — feel.
+  static Fix get jumpSmashBonus => Fix.of(_config.jumpSmashBonus);
 
   /// Horizontal offset from the server's centre toward the net at which the
   /// shuttle is placed for a serve.
@@ -73,20 +112,20 @@ abstract final class Tunables {
   /// Maximum (and starting) stamina.
   static const Fix staminaMax = Fix.of(kStaminaMax);
 
-  /// Stamina drained by a normal (or drop) shot.
-  static const Fix staminaDrainNormal = Fix.of(kStaminaDrainNormal);
+  /// Stamina drained by a normal (or drop) shot (feel — tunable).
+  static Fix get staminaDrainNormal => Fix.of(_config.staminaDrainNormal);
 
-  /// Stamina drained by a smash.
-  static const Fix staminaDrainSmash = Fix.of(kStaminaDrainSmash);
+  /// Stamina drained by a smash (feel — tunable).
+  static Fix get staminaDrainSmash => Fix.of(_config.staminaDrainSmash);
 
-  /// Stamina drained by a jump.
-  static const Fix staminaDrainJump = Fix.of(kStaminaDrainJump);
+  /// Stamina drained by a jump (feel — tunable).
+  static Fix get staminaDrainJump => Fix.of(_config.staminaDrainJump);
 
-  /// Stamina drained per tick of movement.
-  static const Fix staminaDrainMove = Fix.of(kStaminaDrainMove);
+  /// Stamina drained per tick of movement (feel — tunable).
+  static Fix get staminaDrainMove => Fix.of(_config.staminaDrainMove);
 
-  /// Stamina regained per tick while idle and grounded.
-  static const Fix staminaRegen = Fix.of(kStaminaRegen);
+  /// Stamina regained per tick while idle and grounded (feel — tunable).
+  static Fix get staminaRegen => Fix.of(_config.staminaRegen);
 
   /// Stamina level below which the low-stamina effort debuff applies.
   static const Fix staminaDebuffThreshold = Fix.of(kStaminaDebuffThreshold);
@@ -98,27 +137,28 @@ abstract final class Tunables {
   /// smash block (M1-035).
   static const Fix imperfectBlockPower = Fix.of(kImperfectBlockPowerMultiplier);
 
-  // -- Shuttle --------------------------------------------------------------
+  // -- Shuttle (feel — tunable) ---------------------------------------------
 
   /// Per-tick downward gravity applied to the shuttle's velocity (+y).
-  static const Fix shuttleGravity = Fix.of(kShuttleGravity);
+  static Fix get shuttleGravity => Fix.of(_config.shuttleGravity);
 
   /// Maximum shuttle speed in game units per tick (stability safeguard).
-  static const Fix shuttleMaxVelocity = Fix.of(kShuttleMaxVelocity);
+  static Fix get shuttleMaxVelocity => Fix.of(_config.shuttleMaxVelocity);
 
   /// Velocity-scaling factor applied when the shuttle clips the net cord.
-  static const Fix netCordDamping = Fix.of(kNetCordDamping);
+  static Fix get netCordDamping => Fix.of(_config.netCordDamping);
 
   /// Quadratic-drag coefficient for normal shuttle flight (the rally default).
-  static const Fix shuttleDragCoefficient = Fix.of(kShuttleDragCoefficient);
+  static Fix get shuttleDragCoefficient =>
+      Fix.of(_config.shuttleDragCoefficient);
 
   /// Quadratic-drag coefficient for drop shots (higher, bleeds speed faster).
-  static const Fix shuttleDropShotDrag = Fix.of(kShuttleDropShotDrag);
+  static Fix get shuttleDropShotDrag => Fix.of(_config.shuttleDropShotDrag);
 
   // -- Shots ----------------------------------------------------------------
 
-  /// Launch speed of a normal clear/drive shot, in game units per tick.
-  static const Fix normalShotSpeed = Fix.of(kNormalShotSpeed);
+  /// Launch speed of a normal clear/drive shot, in game units per tick (feel).
+  static Fix get normalShotSpeed => Fix.of(_config.normalShotSpeed);
 
   /// Minimum launch angle of a normal shot, in radians.
   static const Fix normalShotAngleMin = Fix.of(kNormalShotAngleMin);
@@ -126,8 +166,8 @@ abstract final class Tunables {
   /// Maximum launch angle of a normal shot, in radians.
   static const Fix normalShotAngleMax = Fix.of(kNormalShotAngleMax);
 
-  /// Launch speed of a smash, in game units per tick.
-  static const Fix smashSpeed = Fix.of(kSmashSpeed);
+  /// Launch speed of a smash, in game units per tick (feel — tunable).
+  static Fix get smashSpeed => Fix.of(_config.smashSpeed);
 
   /// Minimum launch angle of a smash, in radians.
   static const Fix smashAngleMin = Fix.of(kSmashAngleMin);
@@ -135,17 +175,17 @@ abstract final class Tunables {
   /// Maximum launch angle of a smash, in radians.
   static const Fix smashAngleMax = Fix.of(kSmashAngleMax);
 
-  /// Launch speed of a drop shot, in game units per tick.
-  static const Fix dropShotSpeed = Fix.of(kDropShotSpeed);
+  /// Launch speed of a drop shot, in game units per tick (feel — tunable).
+  static Fix get dropShotSpeed => Fix.of(_config.dropShotSpeed);
 
   /// Launch angle of a drop shot, in radians (fixed, no spread).
   static const Fix dropShotAngle = Fix.of(kDropShotAngle);
 
-  /// Minimum launch speed of a serve toss (tap-release), in game units per tick.
-  static const Fix tossSpeedMin = Fix.of(kTossSpeedMin);
+  /// Minimum launch speed of a serve toss (tap-release), per tick (feel).
+  static Fix get tossSpeedMin => Fix.of(_config.tossSpeedMin);
 
-  /// Maximum launch speed of a serve toss (full charge), in game units per tick.
-  static const Fix tossSpeedMax = Fix.of(kTossSpeedMax);
+  /// Maximum launch speed of a serve toss (full charge), per tick (feel).
+  static Fix get tossSpeedMax => Fix.of(_config.tossSpeedMax);
 
   /// Launch angle of a serve toss, in radians (fixed, no spread).
   static const Fix tossAngle = Fix.of(kTossAngle);

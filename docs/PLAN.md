@@ -9,8 +9,8 @@ todos:
     content: "Milestone 1 Platform Hygiene [S]: landscape lock (iOS plist + Android manifest + SystemChrome), app lifecycle auto-pause, git/GitHub + CLAUDE.md conventions"
     status: pending
   - id: milestone-1a
-    content: "Milestone 1A: Engine Core -- [F] fixed-timestep accumulator + tick order + math abstraction + seeded PRNG + perfect-block redefinition; [O] shuttle physics, swept collision, ShotSystem, FSM + serve rules; [S] Player, InputBuffer/Validator, Stamina, Stun, Scoring (incl. golden point), rules gaps (double-hit, behind-player contact, net-cord, stuck shuttle), BalanceConfig + tuning overlay, unit tests"
-    status: pending
+    content: "Milestone 1A: Engine Core -- [F] fixed-timestep accumulator + tick order + math abstraction + seeded PRNG + perfect-block redefinition; [O] shuttle physics, swept collision, ShotSystem, FSM + serve rules; [S] Player, InputBuffer/Validator, Stamina, Stun, Scoring (incl. golden point), rules gaps (double-hit, behind-player contact, net-cord, stuck shuttle), BalanceConfig + tuning overlay, unit tests. DONE: all systems implemented, M1-032 BalanceConfig + debug tuning overlay landed; engine coverage 95%."
+    status: completed
   - id: milestone-1b
     content: "Milestone 1B: Flame Rendering [S] -- BadmintonGame shell (1280x720 letterboxed), RenderState, Court/Player/Shuttle components, touch controls + safe-area/notch + multi-touch, basic HUD"
     status: completed
@@ -199,7 +199,11 @@ Implementation tasks:
 - **M1-016** `[S]`: `ScoringSystem` — configurable target (5/11/21), deuce at target-1, 2-point lead, **cap at target+4** (so 11 -> golden point at 14-14; spec + test explicitly), side-switching OFF by default (tuning flag).
 - **M1-017** `[F]` design / `[O]` impl: `Simulation` — 60 ticks/sec via accumulator (M1-030), ordered systems: InputValidator -> InputBuffer -> PlayerMovement -> ShotSystem -> ShuttlePhysics -> CollisionSystem -> StaminaSystem -> StunSystem -> MatchFSM. Order documented.
 - **M1-018** `[S]`: `MatchErrorHandler` — snapshot + last 60 input frames on unrecoverable error, graceful match termination.
-- **M1-032** `[S]`: `BalanceConfig` from `assets/data/balance.json` + **debug tuning overlay** (sliders for gravity/drag/speeds at runtime) + desktop dev target wired for keyboard play (fast tuning loop).
+- **M1-032** `[S]` (DONE): `BalanceConfig` from `assets/data/balance.json` + **debug tuning overlay** (sliders for gravity/drag/speeds at runtime) + desktop dev target wired for keyboard play (fast tuning loop).
+  - `BalanceConfig` (pure Dart, immutable) holds the **feel** subset — physics coefficients, launch/player speeds, stamina drains; `defaults()` is built straight from the `k*` constants so they can't drift. Structural geometry, shot **angles**, and scoring stay compile-time const (the verified net-clearance math depends on them).
+  - `Tunables` now delegates feel fields to a swappable active config (`Tunables.apply` / `resetToDefaults`), defaulting to `BalanceConfig.defaults()`. Set once before a match → determinism within a match preserved (10k-tick tests unaffected). M3 path: config moves into `GameState`'s snapshot signature for cross-peer agreement.
+  - Game layer: `BalanceLoader` reads `assets/data/balance.json` (engine stays pure — no `rootBundle`), applied in `main()`. `TuningOverlay` (debug-only, stripped from release) is a slide-in slider panel grouped by subsystem; a slider release re-applies the config and restarts the match.
+  - **Feel-tuning to "fun" is the owner's manual gate step** (`flutter run -d macos`, keyboard play). Engine code/tests are in place: coverage 95%, full suite green.
 - **M1-019** `[S]`: Unit tests — determinism over 10k ticks (same seed => identical state hash), swept-collision cases incl. max-speed smash through net plane, FSM valid/invalid transitions, scoring (deuce, golden point 14-14, caps at 5/21 targets), stamina curves, stun boundaries per M1-035 spec, serve faults, double-hit fault, behind-body whiff, stuck-shuttle timeout.
 
 ### 1B -- Flame Rendering

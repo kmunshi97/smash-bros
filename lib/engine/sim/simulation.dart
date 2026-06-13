@@ -270,9 +270,7 @@ final class Simulation {
     final moved = dir != Fix.zero && !player.isStunned;
     if (dir != Fix.zero) {
       final dx =
-          dir *
-          const Fix.of(kPlayerSpeed) *
-          StaminaSystem.effortMultiplier(player);
+          dir * Tunables.playerSpeed * StaminaSystem.effortMultiplier(player);
       player.moveBy(dx, _state.court);
     }
 

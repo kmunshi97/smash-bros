@@ -1,9 +1,13 @@
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:smash_bros/engine/ai/ai.dart';
 import 'package:smash_bros/engine/entities/court.dart';
+import 'package:smash_bros/engine/entities/tunables.dart';
 import 'package:smash_bros/game/badminton_game.dart';
+import 'package:smash_bros/game/balance_loader.dart';
+import 'package:smash_bros/game/components/hud/tuning_overlay.dart';
 import 'package:smash_bros/ui/theme/theme.dart';
 
 Future<void> main() async {
@@ -19,6 +23,10 @@ Future<void> main() async {
   // navigation bar; they reappear on swipe and auto-hide again. Harmless on
   // iOS and macOS dev targets.
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  // M1-032: load feel-tuning config from assets before any simulation is
+  // built, so the first match already uses the tuned values. Falls back to
+  // BalanceConfig.defaults() on any error (see BalanceLoader).
+  Tunables.apply(await BalanceLoader.load());
   runApp(const MainApp());
 }
 
@@ -121,6 +129,25 @@ class _GameScreenState extends State<GameScreen> {
 
     // Do NOT wrap GameWidget in SafeArea — that would letterbox the court away
     // from the notch. Touch controls handle their own safe-area insets.
-    return GameWidget(game: _game);
+    final gameWidget = GameWidget(game: _game);
+
+    // M1-032: the debug feel-tuning overlay is a *dev tool*, stripped from
+    // release builds. It is not a shipping UI flow, so the "no popups" design
+    // rule does not apply; it slides in over the game and restarts the match
+    // when a slider changes so the new physics take effect cleanly.
+    if (!kDebugMode) return gameWidget;
+    return Stack(
+      children: [
+        gameWidget,
+        TuningOverlay(
+          onApply: (config) {
+            Tunables.apply(config);
+            // Fresh seeds so the retuned rally restarts cleanly.
+            final base = DateTime.now().millisecondsSinceEpoch;
+            _game.restartMatch(seed: base, aiSeed: base ^ 0xDEADBEEF);
+          },
+        ),
+      ],
+    );
   }
 }
