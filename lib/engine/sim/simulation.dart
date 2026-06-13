@@ -80,6 +80,7 @@ final class Simulation {
 
   final List<CollisionEvent> _lastTickCollisions = <CollisionEvent>[];
   final List<SwingResult> _lastTickSwings = <SwingResult>[];
+  final List<BlockResult> _lastTickBlocks = <BlockResult>[];
 
   /// The collision events produced during the most recent [tick].
   ///
@@ -95,6 +96,15 @@ final class Simulation {
   /// effects/audio.
   List<SwingResult> get lastTickSwings =>
       List<SwingResult>.unmodifiable(_lastTickSwings);
+
+  /// The blocks (defender swings against an incoming smash) resolved during the
+  /// most recent [tick].
+  ///
+  /// Cleared at the start of each [tick] and filled during step 4 whenever a
+  /// connecting swing was a perfect or imperfect block. Consumed by the
+  /// presentation layer for haptics and block VFX (M2-030).
+  List<BlockResult> get lastTickBlocks =>
+      List<BlockResult>.unmodifiable(_lastTickBlocks);
 
   /// A test-only fault hook invoked at the very top of [tick].
   ///
@@ -124,6 +134,7 @@ final class Simulation {
 
     _lastTickCollisions.clear();
     _lastTickSwings.clear();
+    _lastTickBlocks.clear();
 
     final inputs = _readInputs();
     _pumpPhase(inputs);
@@ -348,6 +359,12 @@ final class Simulation {
 
     _lastTickSwings.add(result);
     StaminaSystem.chargeShot(player, shotType);
+    // Record the block outcome for the presentation layer (haptics/VFX, M2-030)
+    // whenever this connecting swing was actually a block against an incoming
+    // smash — a plain rally shot (notApplicable) is not a block.
+    if (blockTiming != BlockTiming.notApplicable) {
+      _lastTickBlocks.add(BlockResult(side: side, timing: blockTiming));
+    }
     if (blockTiming == BlockTiming.imperfect) {
       // An imperfectly timed block still connects but stuns the defender (the
       // weak pop-up per the StunSystem contract). A perfect block is clean.

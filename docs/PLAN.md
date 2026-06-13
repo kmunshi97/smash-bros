@@ -237,7 +237,9 @@ Full match vs AI with all mechanics, deterministic over a fixed seed, landscape-
 ### 2A -- Visual Polish
 
 - **M2-001..005** `[S]`: sprites (8 states), parallax, camera + shake, particles, animation state machine (unchanged from v2).
+  - **M2-003 (camera shake) + M2-004 (particles): DONE** as an art-free "impact juice" PR on the existing `RenderEvent` system. `ScreenShake` controller nudges the camera on smash impact (harder when airborne) and perfect block; `ImpactEffectsComponent` spawns particle bursts (smash sparks, ground dust on landing, net-hit puffs). Both are pure presentation reading `frameEvents` only. Sprites (M2-001), parallax (M2-002), and the animation state machine (M2-005) remain — they need art assets.
 - **M2-030** `[S]` (NEW): Haptics — `HapticFeedback` on smash impact + perfect block. Cheapest feel win available.
+  - **DONE (smash) / wired-but-dormant (perfect block).** `HapticsComponent` buzzes on every smash connect. The perfect-block buzz/shake/spark is wired end-to-end (engine now emits a `BlockEvent` via `Simulation.lastTickBlocks` → `RenderState.capture`), but is **currently dormant**: a perfectly-timed block swings 6–12 ticks *before* the shuttle is in reach, and `ShotSystem.trySwing` requires reach-now, so a perfect block whiffs and never connects. **Engine gap to close (M1-035/M2-023 follow-up): make an early, perfectly-timed block swing actually return the shuttle** (a pending-block that resolves on arrival). Once that lands, the perfect-block feedback lights up with no presentation changes. Imperfect blocks already connect (and stun); the infra/tests cover that path.
 
 ### 2B -- Audio
 

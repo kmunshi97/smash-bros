@@ -21,6 +21,29 @@ enum BlockTiming {
   notApplicable,
 }
 
+/// A block that resolved this tick — a defender's swing against an incoming
+/// smash, classified by [timing] (only [BlockTiming.perfect] or
+/// [BlockTiming.imperfect] are ever recorded; a [BlockTiming.notApplicable]
+/// swing is an ordinary shot, not a block).
+///
+/// Surfaced via `Simulation.lastTickBlocks` and mapped to a `BlockEvent` in
+/// `RenderState.capture` so the presentation layer can react with haptics and
+/// VFX (M2-030): a satisfying punch on a perfect block, stun stars on an
+/// imperfect one. Value-semantic, mirroring `SwingResult`.
+final class BlockResult {
+  /// Creates a block result for [side]'s defender swing with [timing].
+  const BlockResult({required this.side, required this.timing});
+
+  /// The court side of the defender who blocked.
+  final CourtSide side;
+
+  /// Whether the block was [BlockTiming.perfect] or [BlockTiming.imperfect].
+  final BlockTiming timing;
+
+  /// Whether this was a clean, full-power perfect block.
+  bool get isPerfect => timing == BlockTiming.perfect;
+}
+
 /// Owns stun bookkeeping and the perfect-block timing verdict (M1-012 / M1-035).
 ///
 /// ## The block-timing design (M1-035)

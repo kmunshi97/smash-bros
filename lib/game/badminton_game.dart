@@ -13,7 +13,9 @@ import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
 import 'package:smash_bros/engine/sim/fixed_timestep_driver.dart';
 import 'package:smash_bros/engine/sim/simulation.dart';
+import 'package:smash_bros/engine/systems/shot_type.dart';
 import 'package:smash_bros/game/components/components.dart';
+import 'package:smash_bros/game/effects/screen_shake.dart';
 import 'package:smash_bros/game/input/local_control_state.dart';
 
 /// The Flame game host for Arcade Badminton (M1-020, extended in M1-025/029).
@@ -173,6 +175,12 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   late RenderState _previous;
   late RenderState _current;
 
+  // -- Screen shake (M2-003) --------------------------------------------------
+  // The camera's resting look-at point; the shake offset is added to it each
+  // frame. Cosmetic only — never feeds the simulation.
+  final ScreenShake _shake = ScreenShake();
+  late Vector2 _cameraBase;
+
   // Cached interpolated view, recomputed once per render frame in [update].
   late RenderState _view;
 
@@ -225,7 +233,8 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     // default, which would put the court's top-left corner in the middle of
     // the screen. Aim it at the court centre so world coords map 1:1 onto the
     // 1280×720 letterboxed screen.
-    camera.viewfinder.position = Vector2(kCourtWidth / 2, kCourtHeight / 2);
+    _cameraBase = Vector2(kCourtWidth / 2, kCourtHeight / 2);
+    camera.viewfinder.position = _cameraBase;
 
     // -- World components (M1-022..024) ---------------------------------------
     // Order matters: court is drawn first (background), then players, then the
@@ -236,6 +245,13 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     await world.add(PlayerComponent(CourtSide.left));
     await world.add(PlayerComponent(CourtSide.right));
     await world.add(ShuttleComponent());
+
+    // -- Impact juice (M2-003/004/030) ---------------------------------------
+    // Both read game.frameEvents only. The effects component spawns particle
+    // systems into the world; the haptics component buzzes the device. Screen
+    // shake is driven from update() (it nudges the camera, not the world).
+    await world.add(ImpactEffectsComponent());
+    await add(HapticsComponent());
 
     // -- Touch controls (M1-025) added to viewport (HUD space) ---------------
     // Each component handles its own safe-area insets; updates its anchor
@@ -280,10 +296,33 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
         ? const []
         : List<RenderEvent>.unmodifiable(_pendingEvents.toList());
     _pendingEvents.clear();
+
+    // -- Screen shake (M2-003) ------------------------------------------------
+    // Trigger off this frame's events: a smash punches the camera (harder when
+    // airborne — the jump smash), a perfect block gives a crisp pop. Then decay
+    // and apply the offset to the camera's resting look-at point.
+    for (final event in _frameEvents) {
+      switch (event) {
+        case SwingEvent(shotType: ShotType.smash, :final wasAirborne):
+          _shake.shake(wasAirborne ? _kAirborneSmashShake : _kSmashShake);
+        case BlockEvent(isPerfect: true):
+          _shake.shake(_kPerfectBlockShake);
+        case _:
+          break;
+      }
+    }
+    _shake.update(dt);
+    camera.viewfinder.position = _cameraBase + _shake.offset;
+
     // Recompute the cached view once per render frame (after advancing the
     // driver so alpha is current for this frame's interpolation point).
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
   }
+
+  // Shake peak amplitudes in game units (court is 1280 wide).
+  static const double _kSmashShake = 9;
+  static const double _kAirborneSmashShake = 14;
+  static const double _kPerfectBlockShake = 11;
 
   /// The interpolated render state between the previous and current ticks,
   /// cached once per render frame in [update].
