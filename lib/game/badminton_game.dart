@@ -11,6 +11,7 @@ import 'package:smash_bros/engine/ai/ai.dart';
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
+import 'package:smash_bros/engine/rules/match_phase.dart';
 import 'package:smash_bros/engine/sim/fixed_timestep_driver.dart';
 import 'package:smash_bros/engine/sim/simulation.dart';
 import 'package:smash_bros/engine/systems/shot_type.dart';
@@ -18,6 +19,7 @@ import 'package:smash_bros/game/components/components.dart';
 import 'package:smash_bros/game/court_projection.dart';
 import 'package:smash_bros/game/effects/screen_shake.dart';
 import 'package:smash_bros/game/input/local_control_state.dart';
+import 'package:smash_bros/game/match_result.dart';
 import 'package:smash_bros/game/modes/modes.dart';
 import 'package:smash_bros/game/ui/pause_menu.dart';
 
@@ -215,6 +217,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   late StaminaBarComponent _staminaRight;
   late PhaseBannerComponent _phaseBanner;
   late PauseButtonComponent _pauseButton;
+  late MatchClockComponent _matchClock;
 
   // -- FlameGame overrides ---------------------------------------------------
 
@@ -288,11 +291,13 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     );
     _phaseBanner = PhaseBannerComponent();
     _pauseButton = PauseButtonComponent(safeArea: _safeArea);
+    _matchClock = MatchClockComponent(safeArea: _safeArea);
     await camera.viewport.add(_scoreHud);
     await camera.viewport.add(_staminaLeft);
     await camera.viewport.add(_staminaRight);
     await camera.viewport.add(_phaseBanner);
     await camera.viewport.add(_pauseButton);
+    await camera.viewport.add(_matchClock);
 
     // -- Pause menu overlay (M2-016) -----------------------------------------
     // Registered on the game (not via GameWidget.overlayBuilderMap) so the
@@ -352,6 +357,21 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     // Recompute the cached view once per render frame (after advancing the
     // driver so alpha is current for this frame's interpolation point).
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
+
+    // -- Match-over hook (M2-015) --------------------------------------------
+    // Fire onMatchOver exactly once when the match ends, so the host screen can
+    // show the post-match summary. Re-armed by restartMatch.
+    if (!_matchOverFired && _current.phase == MatchPhase.matchOver) {
+      _matchOverFired = true;
+      final c = _current;
+      onMatchOver?.call(
+        MatchResult(
+          winner: c.leftScore > c.rightScore ? CourtSide.left : CourtSide.right,
+          leftScore: c.leftScore,
+          rightScore: c.rightScore,
+        ),
+      );
+    }
   }
 
   // Shake peak amplitudes in game units (court is 1280 wide).
@@ -393,6 +413,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       _staminaLeft.safeArea = value;
       _staminaRight.safeArea = value;
       _pauseButton.safeArea = value;
+      _matchClock.safeArea = value;
     }
   }
 
@@ -436,6 +457,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       timeLimitTicks: _mode.timeLimitTicks,
     );
     _simulation.start();
+    _matchOverFired = false;
     final difficulty = AiDifficulty.roll(aiSeed);
     _rightAi = difficulty.build(side: CourtSide.right, seed: aiSeed);
     rightAiDifficulty = difficulty;
@@ -531,6 +553,13 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   /// When non-null the pause menu shows a "Main Menu" button that invokes it
   /// (after closing the menu). Null in tests / standalone use.
   VoidCallback? onExitToMenu;
+
+  /// Optional hook fired exactly once when the match ends (M2-015), so the host
+  /// can show the post-match summary screen. When non-null, the in-game
+  /// tap-to-restart overlay stays inert (the screen drives replay instead).
+  void Function(MatchResult result)? onMatchOver;
+
+  bool _matchOverFired = false;
 
   /// Whether the player paused via the menu (as opposed to an app-background
   /// pause). Kept so a background→foreground cycle does not silently resume a

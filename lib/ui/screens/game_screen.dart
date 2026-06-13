@@ -6,8 +6,10 @@ import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/entities/tunables.dart';
 import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/components/hud/tuning_overlay.dart';
+import 'package:smash_bros/game/match_result.dart';
 import 'package:smash_bros/game/modes/modes.dart';
 import 'package:smash_bros/game/ui/court_align_overlay.dart';
+import 'package:smash_bros/ui/screens/post_match_screen.dart';
 
 /// Host widget for [BadmintonGame] for a chosen [mode] (M2-2C).
 ///
@@ -44,18 +46,41 @@ class _GameScreenState extends State<GameScreen> {
     // XOR offset ensures the AI PRNG stream is independent of the match stream.
     final base = DateTime.now().millisecondsSinceEpoch;
     final aiSeed = base ^ 0xDEADBEEF;
-    _game = BadmintonGame(
-      seed: base,
-      mode: widget.mode,
-      rightAi: AiDifficulty.roll(aiSeed).build(
-        side: CourtSide.right,
-        seed: aiSeed,
-      ),
-    )..onExitToMenu = _exitToMenu;
+    _game =
+        BadmintonGame(
+            seed: base,
+            mode: widget.mode,
+            rightAi: AiDifficulty.roll(aiSeed).build(
+              side: CourtSide.right,
+              seed: aiSeed,
+            ),
+          )
+          ..onExitToMenu = _exitToMenu
+          ..onMatchOver = _showPostMatch;
   }
 
   void _exitToMenu() {
-    if (mounted) Navigator.of(context).pop();
+    // Pop to the first route (Home), past Mode Select and the game.
+    if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  Future<void> _showPostMatch(MatchResult result) async {
+    if (!mounted) return;
+    // Full-screen summary over the (finished) match.
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PostMatchScreen(
+          result: result,
+          mode: widget.mode,
+          onPlayAgain: () {
+            Navigator.of(context).pop(); // close the summary
+            final base = DateTime.now().millisecondsSinceEpoch;
+            _game.restartMatch(seed: base, aiSeed: base ^ 0xDEADBEEF);
+          },
+          onMainMenu: () => Navigator.of(context).popUntil((r) => r.isFirst),
+        ),
+      ),
+    );
   }
 
   @override

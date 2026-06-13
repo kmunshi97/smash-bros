@@ -263,7 +263,7 @@ The flat side-view sim vs. perspective-court art mismatch caused false in/out ca
 
 - **M2-008** `[S]`: `MatchBloc` — events carry frame IDs + confirmed-frame watermark (ADR-8); error recovery screen.
 - **M2-009/010/011** `[S]`: InputBloc, UIBloc (no popups), `SimulationBridge` — drives the **accumulator** (M1-030), not raw Ticker ticks.
-- **M2-012..015** `[S]`: home / mode select / settings / post-match screens. **M2-012 (home) + M2-013 (mode select): DONE** — `HomeScreen` (title + PLAY) → `ModeSelectScreen` (built from the available `GameMode`s) → `GameScreen(mode)`; all full-screen routes, the game built once per match. Settings (M2-014) and a dedicated post-match summary (M2-015) remain (exit-to-menu is via the pause menu today).
+- **M2-012..015** `[S]`: home / mode select / settings / post-match screens. **M2-012 (home) + M2-013 (mode select) + M2-015 (post-match): DONE** — `HomeScreen` (title + PLAY) → `ModeSelectScreen` (built from the available `GameMode`s) → `GameScreen(mode)`; all full-screen routes, the game built once per match. `PostMatchScreen` (win/lose, final score, mode, Play Again / Main Menu) is shown via a `BadmintonGame.onMatchOver` hook that fires once at match end; the M1 tap-to-restart overlay goes inert when that hook is wired. Settings (M2-014) remains.
 - **M2-016** `[S]` (DONE): Pause flow + **M2-033** Android back button — full-screen Flame overlay (Resume / Restart / Main Menu), `PopScope` routes back → pause (never pop mid-match), survives an app background cycle.
 - **M2-034** `[H]` (NEW): SharedPreferences schema version key + migration convention (tutorial flag, settings, AI slider, future cached loadouts).
 - **M2-017/018** `[S]`: widget tests, full-match integration test.
@@ -272,7 +272,7 @@ The flat side-view sim vs. perspective-court art mismatch caused false in/out ca
 
 - **M2-019** `[S]` (DONE): `GameMode` interface (sealed, pure config → Simulation). Timer-expiry semantics implemented via a deterministic engine **match clock** (`MatchFsm.tickMatchClock`, snapshotted + in the desync signature) ticked **after** scoring each tick: a countdown hitting zero mid-rally lets the rally finish and its point count; expiry-vs-point on the same tick favours the point; a tie at expiry goes to a golden point.
 - **M2-020** `[S]` (DONE): `ClassicMode` (target 5/11/21, untimed). Side-switch flag still default off (unchanged).
-- **M2-021** `[S]` (DONE): `PointRushMode` (timed; unreachable score target so only the clock ends it; leader at expiry wins). `RenderState` now exposes `isTimed`/`remainingTicks` for a HUD countdown.
+- **M2-021** `[S]` (DONE): `PointRushMode` (timed; unreachable score target so only the clock ends it; leader at expiry wins). `RenderState` exposes `isTimed`/`remainingTicks`, rendered by `MatchClockComponent` — a top-centre `m:ss` countdown (warning colour in the last 10 s) shown only for timed matches.
 - **M2-022** `[S]`: IntermediateAI.
 - **M2-023** `[O]`: HardAI (predictive movement, corner placement, perfect blocks, 3-frame delay).
 - **M2-024** `[S]`: difficulty config + presets + slider.
