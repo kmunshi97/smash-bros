@@ -1,7 +1,7 @@
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:smash_bros/engine/ai/basic_ai.dart';
+import 'package:smash_bros/engine/ai/ai.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/ui/theme/theme.dart';
@@ -73,10 +73,15 @@ class _GameScreenState extends State<GameScreen> {
     // engine. The engine never calls dart:math directly (see CLAUDE.md).
     // Both seeds are derived from the same millisecond base; XOR offset ensures
     // they differ so the AI PRNG stream is independent of the match PRNG stream.
+    // The opponent's difficulty tier is rolled at random from the AI seed —
+    // easy, hard, or challenging — fresh each match.
     final base = DateTime.now().millisecondsSinceEpoch;
+    final aiSeed = base ^ 0xDEADBEEF;
     _game = BadmintonGame(
       seed: base,
-      rightAi: BasicAI(side: CourtSide.right, seed: base ^ 0xDEADBEEF),
+      rightAi: AiDifficulty.roll(
+        aiSeed,
+      ).build(side: CourtSide.right, seed: aiSeed),
     );
   }
 

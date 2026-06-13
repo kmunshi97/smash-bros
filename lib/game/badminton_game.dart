@@ -7,8 +7,7 @@ import 'package:flame/input.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' hide Simulation;
-import 'package:smash_bros/engine/ai/ai_controller.dart';
-import 'package:smash_bros/engine/ai/basic_ai.dart';
+import 'package:smash_bros/engine/ai/ai.dart';
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
@@ -98,6 +97,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
        ) {
     _initDriver();
     rightCharacter = _pickOpponent(seed);
+    rightAiDifficulty = rightAi is RuleBasedAi ? rightAi.difficulty : null;
   }
 
   /// Picks the opponent character for a match from its [seed].
@@ -118,6 +118,13 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
 
   /// The randomly selected character type for the opponent (right player).
   late CharacterType rightCharacter;
+
+  /// The difficulty tier of the current right-side AI, or `null` when the
+  /// right player is not driven by a [RuleBasedAi] (two-human/testing).
+  ///
+  /// Rolled at random per match (see [restartMatch]); exposed so the HUD or
+  /// a post-match screen can reveal which opponent the player drew.
+  AiDifficulty? rightAiDifficulty;
 
   /// Cached character sprites.
   late final Sprite astronautRedSprite;
@@ -332,10 +339,10 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
 
   /// Restarts the match with fresh seeds, resetting the simulation and AI.
   ///
-  /// Replaces [_simulation] with a new one using [seed], recreates the AI
-  /// with [aiSeed], resets the driver accumulator (so no burst of catch-up
-  /// ticks on the first frame), and recaptures both render snapshots from
-  /// the new initial state.
+  /// Replaces [_simulation] with a new one using [seed], rolls a fresh
+  /// random [AiDifficulty] from [aiSeed] and builds its AI, resets the
+  /// driver accumulator (so no burst of catch-up ticks on the first frame),
+  /// and recaptures both render snapshots from the new initial state.
   ///
   /// Seeds are derived in the game layer from wall-clock time, which is
   /// explicitly allowed outside `lib/engine/` (see CLAUDE.md). The engine
@@ -347,7 +354,9 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       targetScore: _targetScore,
     );
     _simulation.start();
-    _rightAi = BasicAI(side: CourtSide.right, seed: aiSeed);
+    final difficulty = AiDifficulty.roll(aiSeed);
+    _rightAi = difficulty.build(side: CourtSide.right, seed: aiSeed);
+    rightAiDifficulty = difficulty;
     _driver.reset();
     _current = RenderState.capture(_simulation);
     _previous = _current;

@@ -215,6 +215,12 @@ Implementation tasks:
 - **M1-027** `[S]`: `AIController` interface — deterministic, randomness via a private `GameRandom` owned by the AI (NOT `GameState.random` — the AI's draws must not touch the tick-owned PRNG stream; rollback replays recorded inputs, not the AI, so the stream must be bit-identical on re-execution).
 - **M1-028** `[S]`: `BasicAI` — 15-frame reaction delay, 70/20/10 shot mix.
 - **M1-029** `[S]`: Wire into playable match, tap-to-restart.
+- **M1-028b** `[S]` (DONE): **Three difficulty tiers** pulled forward from M2-022/023 onto a shared `RuleBasedAi` skeleton (serve/rally structure single-sourced):
+  - **easy** — `BasicAI` (above): 15-tick reaction, chases the shuttle's *current* x, 70/20/10 shot mix.
+  - **hard** — `HardAI`: 8-tick reaction, `ShuttlePredictor` trajectory lookahead (walks to the predicted descent x before the shuttle arrives), 50/35/15 mix, net-clearance gate on smashes.
+  - **challenging** — `ChallengingAI` (the M2-023 spec): 3-tick reaction, tight intercept, context-aware shot choice (jump-smash when the geometry clears the net, drop near the net, else clear/drop).
+  - `AiDifficulty.roll(seed)` assigns one tier **at random per match** in the game layer (no difficulty screen yet — that arrives with M2-024); `ShuttlePredictor` is a pure deterministic ghost-integration, drawing from no PRNG.
+  - Note: M2-022 `IntermediateAI` is now the one remaining tier to fill the gap between easy and hard; M2-023 `HardAI` is effectively delivered here (revisit its perfect-block behaviour when `StunSystem` blocking is tuned).
 
 ### MVP Done Criteria
 
