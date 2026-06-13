@@ -1,6 +1,7 @@
 import 'package:flame/components.dart';
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/game/badminton_game.dart';
+import 'package:smash_bros/game/components/parallax_backdrop_component.dart';
 
 /// Static scenery component that loads and renders the background assets.
 ///
@@ -14,19 +15,16 @@ class CourtComponent extends Component with HasGameReference<BadmintonGame> {
   /// Renders background layers at priority -2 (placed at back of parent world).
   CourtComponent() : super(priority: -2);
 
-  late final SpriteComponent _background;
+  late final ParallaxBackdropComponent _background;
   late final SpriteComponent _floor;
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
 
-    final bgSprite = await game.loadSprite('stadium_bg.png');
-    _background = SpriteComponent(
-      sprite: bgSprite,
-      size: Vector2(kCourtWidth, kCourtHeight),
-      priority: 0,
-    );
+    // Parallax stadium backdrop (M2-002): loads stadium_bg.png itself, drifts
+    // for depth. Behind the floor (priority 0 within this component).
+    _background = ParallaxBackdropComponent(priority: 0);
     await add(_background);
 
     final floorSprite = await game.loadSprite('stadium_floor.png');

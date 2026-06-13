@@ -333,6 +333,12 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   /// identical object without re-lerping.
   RenderState get view => _view;
 
+  /// The camera's current shake displacement from its resting look-at point
+  /// (M2-002/003). Zero when no shake is active. The parallax backdrop reads
+  /// this to drift its layers against the camera for a depth cue.
+  Vector2 get cameraShakeOffset =>
+      isLoaded ? camera.viewfinder.position - _cameraBase : Vector2.zero();
+
   /// The current safe-area insets in game units.
   EdgeInsets get safeArea => _safeArea;
 

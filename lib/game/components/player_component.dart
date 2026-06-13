@@ -7,6 +7,7 @@ import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/entities/player.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
+import 'package:smash_bros/game/animation/player_animator.dart';
 import 'package:smash_bros/game/badminton_game.dart';
 import 'package:smash_bros/game/palette.dart';
 
@@ -78,6 +79,20 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
   // Swing animation state.
   int _swingFrame = _kSwingDuration; // >= _kSwingDuration means not swinging
 
+  // Procedural animation state machine (M2-005) and the per-frame facts it
+  // needs that aren't in a single PlayerView (movement / vertical direction
+  // are derived from the deltas between frames).
+  final PlayerAnimator _animator = PlayerAnimator();
+  double _prevX = 0;
+  double _prevFeetY = 0;
+  bool _hasPrev = false;
+
+  /// The current animation state (drives the procedural pose).
+  ///
+  /// Exposed for testing.
+  @visibleForTesting
+  PlayerAnimState get animState => _animator.state;
+
   /// Whether this component is currently playing a swing animation.
   ///
   /// Exposed for testing via `@visibleForTesting`.
@@ -121,6 +136,28 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
         break; // only one swing per frame
       }
     }
+
+    // -- Drive the procedural animation state machine (M2-005) ----------------
+    // Movement and vertical direction come from the deltas between frames; the
+    // rest of the facts are read straight off the player view.
+    const moveEps = 0.01;
+    final moving = _hasPrev && (pv.x - _prevX).abs() > moveEps;
+    // +y is down, so a decreasing feetY means the player is gaining height.
+    final rising = _hasPrev && pv.feetY < _prevFeetY - moveEps;
+    final swing01 = _swingFrame < _kSwingDuration
+        ? _swingFrame / _kSwingDuration
+        : -1.0;
+    _animator.update(
+      dt,
+      stunned: pv.isStunned,
+      airborne: pv.isAirborne,
+      rising: rising,
+      moving: moving,
+      swing01: swing01,
+    );
+    _prevX = pv.x;
+    _prevFeetY = pv.feetY;
+    _hasPrev = true;
   }
 
   @override
@@ -184,6 +221,18 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
 
     canvas.save();
 
+    // -- Procedural animation pose (M2-005) -----------------------------------
+    // Rotate + squash/stretch around the feet pivot (feet stay planted), then
+    // the horizontal flip below mirrors it to match facing. bobY shifts the
+    // sprite vertically. Applied before the flip so the same pose reads
+    // consistently for both facings.
+    final pose = _animator.pose;
+    canvas
+      ..translate(centreX, feetY)
+      ..rotate(pose.rotation)
+      ..scale(pose.scaleX, pose.scaleY)
+      ..translate(-centreX, -feetY);
+
     // Apply horizontal flip if the facing direction does not match the default
     if (shouldFlip) {
       canvas
@@ -193,9 +242,9 @@ class PlayerComponent extends Component with HasGameReference<BadmintonGame> {
     }
 
     // Position character so that the feet anchor is centered horizontally
-    // and sits exactly at feetY.
+    // and sits exactly at feetY. The pose's vertical bob shifts the sprite.
     final left = centreX - visualWidth / 2;
-    final top = feetY - visualHeight;
+    final top = feetY - visualHeight + pose.bobY;
 
     // Apply a translucent white tint if stunned and on a blink frame
     final Paint? overridePaint;
