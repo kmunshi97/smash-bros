@@ -274,6 +274,8 @@ final class RenderState {
     required this.lastPointReason,
     required this.serveCharge,
     required this.events,
+    this.isTimed = false,
+    this.remainingTicks = 0,
   });
 
   /// Captures the current [Simulation] state into an immutable [RenderState].
@@ -337,6 +339,8 @@ final class RenderState {
         0.0,
         1.0,
       ),
+      isTimed: fsm.isTimed,
+      remainingTicks: fsm.remainingTicks,
       events: List.unmodifiable(events),
     );
   }
@@ -386,6 +390,9 @@ final class RenderState {
       lastPointReason = b.lastPointReason,
       // serveCharge is a UI meter — taken from b (no lerp needed).
       serveCharge = b.serveCharge,
+      // Match-clock fields are discrete UI values — taken from b.
+      isTimed = b.isTimed,
+      remainingTicks = b.remainingTicks,
       // Events always empty in a lerped state (see docs).
       events = const [],
       // Continuous fields: snap if non-consecutive or phase changed.
@@ -415,6 +422,14 @@ final class RenderState {
 
   /// View of the shuttle.
   final ShuttleView shuttle;
+
+  /// Whether the match is timed (Point Rush). When false, [remainingTicks] is
+  /// 0 and the HUD should show no clock.
+  final bool isTimed;
+
+  /// Ticks left on a timed match's clock (0 when untimed or expired). Divide by
+  /// the tick rate for seconds.
+  final int remainingTicks;
 
   /// Left player's current score.
   final int leftScore;

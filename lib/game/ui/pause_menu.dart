@@ -8,14 +8,23 @@ import 'package:smash_bros/ui/theme/app_colors.dart';
 /// offers Resume and Restart; both are passed in so this widget stays free of
 /// game references and is trivially testable.
 class PauseMenu extends StatelessWidget {
-  /// Creates the pause menu with [onResume] / [onRestart] callbacks.
-  const PauseMenu({required this.onResume, required this.onRestart, super.key});
+  /// Creates the pause menu with [onResume] / [onRestart] callbacks and an
+  /// optional [onMainMenu] (the button is hidden when null).
+  const PauseMenu({
+    required this.onResume,
+    required this.onRestart,
+    this.onMainMenu,
+    super.key,
+  });
 
   /// Called when the player resumes the match.
   final VoidCallback onResume;
 
   /// Called when the player restarts the match.
   final VoidCallback onRestart;
+
+  /// Called when the player leaves to the main menu, or null to hide the button.
+  final VoidCallback? onMainMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +55,14 @@ class PauseMenu extends StatelessWidget {
               filled: false,
               onPressed: onRestart,
             ),
+            if (onMainMenu != null) ...[
+              const SizedBox(height: 16),
+              _MenuButton(
+                label: 'MAIN MENU',
+                filled: false,
+                onPressed: onMainMenu!,
+              ),
+            ],
           ],
         ),
       ),

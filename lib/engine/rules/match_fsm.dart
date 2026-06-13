@@ -83,8 +83,34 @@ final class MatchFsm {
   MatchFsm({
     CourtSide firstServer = CourtSide.left,
     int targetScore = kDefaultTargetScore,
+    this.timeLimitTicks,
   }) : server = firstServer,
        scoreboard = Scoreboard(targetScore: targetScore);
+
+  /// Total ticks a **timed** match (e.g. Point Rush, M2-021) runs for, or
+  /// `null` for an untimed match (Classic — ends only by the scoreboard).
+  ///
+  /// Frame-based, so the clock is deterministic and freezes whenever the
+  /// Simulation is not ticked (lifecycle pause). See [tickMatchClock] for the
+  /// expiry semantics.
+  final int? timeLimitTicks;
+
+  /// Ticks elapsed since the match started, counted while the match is live
+  /// (`servePending`/`inPlay`/`pointScored`). Snapshotted by [copy] and folded
+  /// into the desync signature so timed matches stay deterministic.
+  int matchClockTicks = 0;
+
+  /// Whether this is a timed match.
+  bool get isTimed => timeLimitTicks != null;
+
+  /// Whether a timed match's clock has reached its limit.
+  bool get timeExpired =>
+      timeLimitTicks != null && matchClockTicks >= timeLimitTicks!;
+
+  /// Ticks remaining on a timed match's clock (0 once expired; 0 for untimed).
+  int get remainingTicks => timeLimitTicks == null
+      ? 0
+      : (timeLimitTicks! - matchClockTicks).clamp(0, timeLimitTicks!);
 
   /// The current lifecycle phase.
   MatchPhase phase = MatchPhase.preMatch;
@@ -260,15 +286,53 @@ final class MatchFsm {
     final gameWinner = scoreboard.winner;
     if (gameWinner != null) {
       _transition(frame, MatchPhase.matchOver, 'match won by $gameWinner');
-    } else {
-      server = pointWinner!;
-      serveTimerTicks = 0;
-      _transition(
-        frame,
-        MatchPhase.servePending,
-        'next serve (server: $server)',
-      );
+      return;
     }
+    // Timed-match end (M2-021): the rally has finished and the clock is up. The
+    // leader wins; a tie keeps play going (golden point) until the next point
+    // breaks it — at which point this same check ends the match.
+    if (timeExpired) {
+      final leader = _scoreLeader();
+      if (leader != null) {
+        _transition(frame, MatchPhase.matchOver, 'time up, winner $leader');
+        return;
+      }
+    }
+    server = pointWinner!;
+    serveTimerTicks = 0;
+    _transition(
+      frame,
+      MatchPhase.servePending,
+      'next serve (server: $server)',
+    );
+  }
+
+  /// Advances the overall match clock one tick (M2-021).
+  ///
+  /// Called once per Simulation tick while the match is live. Counts up in
+  /// `servePending`/`inPlay`/`pointScored` (inert in `preMatch`/`matchOver`).
+  /// If a timed clock expires **between rallies** (`servePending`) with a
+  /// decided leader, the match ends immediately — there is no rally in flight
+  /// to play out. Mid-rally expiry is deliberately *not* handled here: it is
+  /// deferred to [tickPointPause] so the current rally always finishes and its
+  /// point counts (the M2-019 timer-expiry semantics).
+  void tickMatchClock(int frame) {
+    if (phase == MatchPhase.preMatch || phase == MatchPhase.matchOver) return;
+    matchClockTicks += 1;
+    if (timeExpired && phase == MatchPhase.servePending) {
+      final leader = _scoreLeader();
+      if (leader != null) {
+        _transition(frame, MatchPhase.matchOver, 'time up, winner $leader');
+      }
+      // Tied at expiry between rallies: let the next rally decide.
+    }
+  }
+
+  /// The side currently ahead on the scoreboard, or `null` if tied.
+  CourtSide? _scoreLeader() {
+    if (scoreboard.leftScore > scoreboard.rightScore) return CourtSide.left;
+    if (scoreboard.rightScore > scoreboard.leftScore) return CourtSide.right;
+    return null;
   }
 
   /// Aborts the match into [MatchPhase.matchOver] from any phase (M1-018).
@@ -298,10 +362,12 @@ final class MatchFsm {
         MatchFsm(
             firstServer: server,
             targetScore: scoreboard.targetScore,
+            timeLimitTicks: timeLimitTicks,
           )
           ..phase = phase
           ..serveTimerTicks = serveTimerTicks
           ..pointPauseTicks = pointPauseTicks
+          ..matchClockTicks = matchClockTicks
           ..pointWinner = pointWinner
           ..lastPointReason = lastPointReason
           .._serveRallyActive = _serveRallyActive

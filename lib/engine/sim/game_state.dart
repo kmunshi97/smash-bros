@@ -39,6 +39,7 @@ final class GameState {
     required int seed,
     CourtSide firstServer = CourtSide.left,
     int targetScore = kDefaultTargetScore,
+    int? timeLimitTicks,
   }) : frame = 0,
        serveChargeTicks = 0,
        court = const Court(),
@@ -55,7 +56,11 @@ final class GameState {
        ),
        shuttle = Shuttle(position: FixVec2.zero),
        rally = RallyState(),
-       fsm = MatchFsm(firstServer: firstServer, targetScore: targetScore),
+       fsm = MatchFsm(
+         firstServer: firstServer,
+         targetScore: targetScore,
+         timeLimitTicks: timeLimitTicks,
+       ),
        leftInputs = InputBuffer(),
        rightInputs = InputBuffer();
 
@@ -171,7 +176,8 @@ final class GameState {
         'rally(${rally.lastHitter?.name},${rally.hitLockout?.name},'
         '${rally.lastShotType?.name},${_s(rally.activeDragCoefficient)})|'
         'fsm(${fsm.phase.name},${fsm.server.name},'
-        '${fsm.scoreboard.leftScore}-${fsm.scoreboard.rightScore})|'
+        '${fsm.scoreboard.leftScore}-${fsm.scoreboard.rightScore},'
+        'clk=${fsm.matchClockTicks})|'
         'rng=${random.state.join(',')}';
   }
 
