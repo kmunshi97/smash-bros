@@ -45,9 +45,14 @@ class CourtProjection {
   /// The shipped defaults, estimated from the stadium art. Calibrate live via
   /// the debug court-alignment overlay; these put the engine court onto the
   /// visual court's mid-depth band as a starting point.
+  ///
+  /// [offsetY] places the ground line (engine y = `kGroundY` = 600) at screen
+  /// `offsetY + scaleY*600`. At `offsetY = 50` that is ≈ 512 — mid-court,
+  /// between the far baseline (too deep, the first cut) and the near baseline
+  /// (too close, the pre-projection look).
   CourtProjection.defaults()
     : offsetX = 117,
-      offsetY = -32,
+      offsetY = 50,
       scaleX = 0.817,
       scaleY = 0.77;
 
