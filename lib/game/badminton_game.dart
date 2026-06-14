@@ -11,6 +11,7 @@ import 'package:smash_bros/engine/ai/ai.dart';
 import 'package:smash_bros/engine/constants.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/render/render_state.dart';
+import 'package:smash_bros/engine/rules/match_phase.dart';
 import 'package:smash_bros/engine/sim/fixed_timestep_driver.dart';
 import 'package:smash_bros/engine/sim/simulation.dart';
 import 'package:smash_bros/engine/systems/shot_type.dart';
@@ -18,6 +19,8 @@ import 'package:smash_bros/game/components/components.dart';
 import 'package:smash_bros/game/court_projection.dart';
 import 'package:smash_bros/game/effects/screen_shake.dart';
 import 'package:smash_bros/game/input/local_control_state.dart';
+import 'package:smash_bros/game/match_result.dart';
+import 'package:smash_bros/game/modes/modes.dart';
 import 'package:smash_bros/game/ui/pause_menu.dart';
 
 /// The Flame game host for Arcade Badminton (M1-020, extended in M1-025/029).
@@ -75,7 +78,7 @@ import 'package:smash_bros/game/ui/pause_menu.dart';
 ///   L              → rally (normal) shot
 class BadmintonGame extends FlameGame with KeyboardEvents {
   /// Creates a game with a deterministic [seed], the given [firstServer], and
-  /// a match played to [targetScore].
+  /// the rules of [mode] (target score + optional time limit).
   ///
   /// Pass [rightAi] to wire an [AIController] as the right player's input
   /// source. If omitted, the right player receives no input (useful for
@@ -83,16 +86,19 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   BadmintonGame({
     required int seed,
     CourtSide firstServer = CourtSide.left,
-    int targetScore = kDefaultTargetScore,
+    GameMode mode = const ClassicMode(),
     AIController? rightAi,
+    AiDifficulty? fixedDifficulty,
   }) : _simulation = Simulation(
          seed: seed,
          firstServer: firstServer,
-         targetScore: targetScore,
+         targetScore: mode.targetScore,
+         timeLimitTicks: mode.timeLimitTicks,
        ),
        _firstServer = firstServer,
-       _targetScore = targetScore,
+       _mode = mode,
        _rightAi = rightAi,
+       _fixedDifficulty = fixedDifficulty,
        super(
          camera: CameraComponent.withFixedResolution(
            width: kCourtWidth,
@@ -141,7 +147,15 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
 
   // Stored so restartMatch can recreate the simulation with the same settings.
   final CourtSide _firstServer;
-  final int _targetScore;
+  final GameMode _mode;
+
+  /// The player-chosen opponent difficulty, or `null` to roll a random tier
+  /// each match (M2-024). Read by [restartMatch].
+  final AiDifficulty? _fixedDifficulty;
+
+  /// The game mode this match is playing (Classic, Point Rush, …). Exposed so
+  /// the HUD and post-match screen can label the mode and read its rules.
+  GameMode get mode => _mode;
 
   late FixedTimestepDriver _driver;
 
@@ -209,6 +223,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   late StaminaBarComponent _staminaRight;
   late PhaseBannerComponent _phaseBanner;
   late PauseButtonComponent _pauseButton;
+  late MatchClockComponent _matchClock;
 
   // -- FlameGame overrides ---------------------------------------------------
 
@@ -282,11 +297,13 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     );
     _phaseBanner = PhaseBannerComponent();
     _pauseButton = PauseButtonComponent(safeArea: _safeArea);
+    _matchClock = MatchClockComponent(safeArea: _safeArea);
     await camera.viewport.add(_scoreHud);
     await camera.viewport.add(_staminaLeft);
     await camera.viewport.add(_staminaRight);
     await camera.viewport.add(_phaseBanner);
     await camera.viewport.add(_pauseButton);
+    await camera.viewport.add(_matchClock);
 
     // -- Pause menu overlay (M2-016) -----------------------------------------
     // Registered on the game (not via GameWidget.overlayBuilderMap) so the
@@ -297,6 +314,13 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       (context, game) => PauseMenu(
         onResume: closePauseMenu,
         onRestart: restartFromMenu,
+        // "Main Menu" only appears when the host wired an exit route.
+        onMainMenu: onExitToMenu == null
+            ? null
+            : () {
+                closePauseMenu();
+                onExitToMenu!.call();
+              },
       ),
     );
 
@@ -339,6 +363,21 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     // Recompute the cached view once per render frame (after advancing the
     // driver so alpha is current for this frame's interpolation point).
     _view = RenderState.lerp(_previous, _current, _driver.alpha);
+
+    // -- Match-over hook (M2-015) --------------------------------------------
+    // Fire onMatchOver exactly once when the match ends, so the host screen can
+    // show the post-match summary. Re-armed by restartMatch.
+    if (!_matchOverFired && _current.phase == MatchPhase.matchOver) {
+      _matchOverFired = true;
+      final c = _current;
+      onMatchOver?.call(
+        MatchResult(
+          winner: c.leftScore > c.rightScore ? CourtSide.left : CourtSide.right,
+          leftScore: c.leftScore,
+          rightScore: c.rightScore,
+        ),
+      );
+    }
   }
 
   // Shake peak amplitudes in game units (court is 1280 wide).
@@ -380,6 +419,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
       _staminaLeft.safeArea = value;
       _staminaRight.safeArea = value;
       _pauseButton.safeArea = value;
+      _matchClock.safeArea = value;
     }
   }
 
@@ -419,10 +459,14 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     _simulation = Simulation(
       seed: seed,
       firstServer: _firstServer,
-      targetScore: _targetScore,
+      targetScore: _mode.targetScore,
+      timeLimitTicks: _mode.timeLimitTicks,
     );
     _simulation.start();
-    final difficulty = AiDifficulty.roll(aiSeed);
+    _matchOverFired = false;
+    // Keep the chosen tier across restarts; roll a fresh one only when the
+    // player picked "random" (M2-024).
+    final difficulty = _fixedDifficulty ?? AiDifficulty.roll(aiSeed);
     _rightAi = difficulty.build(side: CourtSide.right, seed: aiSeed);
     rightAiDifficulty = difficulty;
     _driver.reset();
@@ -512,6 +556,18 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   /// The Flame overlay id for the full-screen pause menu (no popups: the menu
   /// covers the whole screen per the design rule).
   static const String pauseOverlayId = 'pause';
+
+  /// Optional hook the host screen sets to leave the match for the main menu.
+  /// When non-null the pause menu shows a "Main Menu" button that invokes it
+  /// (after closing the menu). Null in tests / standalone use.
+  VoidCallback? onExitToMenu;
+
+  /// Optional hook fired exactly once when the match ends (M2-015), so the host
+  /// can show the post-match summary screen. When non-null, the in-game
+  /// tap-to-restart overlay stays inert (the screen drives replay instead).
+  void Function(MatchResult result)? onMatchOver;
+
+  bool _matchOverFired = false;
 
   /// Whether the player paused via the menu (as opposed to an app-background
   /// pause). Kept so a background→foreground cycle does not silently resume a

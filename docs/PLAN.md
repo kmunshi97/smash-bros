@@ -263,19 +263,19 @@ The flat side-view sim vs. perspective-court art mismatch caused false in/out ca
 
 - **M2-008** `[S]`: `MatchBloc` — events carry frame IDs + confirmed-frame watermark (ADR-8); error recovery screen.
 - **M2-009/010/011** `[S]`: InputBloc, UIBloc (no popups), `SimulationBridge` — drives the **accumulator** (M1-030), not raw Ticker ticks.
-- **M2-012..015** `[S]`: home / mode select / settings / post-match screens.
-- **M2-016** `[S]`: Pause flow + **M2-033** (NEW): Android back button — `PopScope` -> pause menu (never pop mid-match), predictive-back opt-in (Android 13+).
+- **M2-012..015** `[S]`: home / mode select / settings / post-match screens. **M2-012 (home) + M2-013 (mode select) + M2-015 (post-match): DONE**, restyled (PRD §6) into a **Contest-of-Champions-inspired hero UI** — deep-space gradient backdrop, gold/energy accents, beveled glow panels. `HomeScreen` = status bar (avatar + level badge + energy/coins/gems chips) → hero VS diorama → game-mode cards (Classic / Point Rush / Competitive-locked) → bottom nav (Home active; Store/Settings placeholders). The old separate mode-select + difficulty-select screens are **replaced by one `ModeSetupScreen`**: a VS preview + Target-Score (5/11/21) **or** Duration (60/90/120s, Point Rush) toggle + Difficulty toggle (4 tiers + Random) + a big FIGHT! CTA → `GameScreen(mode, difficulty)`. Shared widgets in `lib/ui/widgets/arcade_widgets.dart` (SpaceBackground, CurrencyChip, SegmentedToggle, PrimaryCta, GlowPanel). `PostMatchScreen` via the `BadmintonGame.onMatchOver` hook. Settings (M2-014) and the real data behind the header chips (currency/level — M3) remain.
+- **M2-016** `[S]` (DONE): Pause flow + **M2-033** Android back button — full-screen Flame overlay (Resume / Restart / Main Menu), `PopScope` routes back → pause (never pop mid-match), survives an app background cycle.
 - **M2-034** `[H]` (NEW): SharedPreferences schema version key + migration convention (tutorial flag, settings, AI slider, future cached loadouts).
 - **M2-017/018** `[S]`: widget tests, full-match integration test.
 
 ### 2D -- AI & Game Modes
 
-- **M2-019** `[S]`: `GameMode` interface — **specify timer-expiry semantics**: countdown hitting zero mid-rally lets the rally play out, point counts; expiry-vs-point on the same tick resolved by system order (time check after `onPointScored`). Test both.
-- **M2-020** `[S]`: ClassicMode (5/11/21; side-switch flag default off).
-- **M2-021** `[S]`: PointRushMode.
-- **M2-022** `[S]`: IntermediateAI.
-- **M2-023** `[O]`: HardAI (predictive movement, corner placement, perfect blocks, 3-frame delay).
-- **M2-024** `[S]`: difficulty config + presets + slider.
+- **M2-019** `[S]` (DONE): `GameMode` interface (sealed, pure config → Simulation). Timer-expiry semantics implemented via a deterministic engine **match clock** (`MatchFsm.tickMatchClock`, snapshotted + in the desync signature) ticked **after** scoring each tick: a countdown hitting zero mid-rally lets the rally finish and its point count; expiry-vs-point on the same tick favours the point; a tie at expiry goes to a golden point.
+- **M2-020** `[S]` (DONE): `ClassicMode` (target 5/11/21, untimed). Side-switch flag still default off (unchanged).
+- **M2-021** `[S]` (DONE): `PointRushMode` (timed; unreachable score target so only the clock ends it; leader at expiry wins). `RenderState` exposes `isTimed`/`remainingTicks`, rendered by `MatchClockComponent` — a top-centre `m:ss` countdown (warning colour in the last 10 s) shown only for timed matches.
+- **M2-022** `[S]` (DONE): `IntermediateAI` — extends `HardAI` (trajectory prediction + net-clearance smash gate) but slower (12-tick reaction) with looser positioning and a calmer 65/25/10 mix: the rung between easy and hard. Skill-ordering test: beats easy in most matches.
+- **M2-023** `[O]`: HardAI (predictive movement, corner placement, perfect blocks, 3-frame delay). (Delivered earlier as `HardAI`/`ChallengingAI`; perfect-block path still dormant pending the engine block-connect fix.)
+- **M2-024** `[S]` (partial): difficulty config + presets + slider. **Difficulty select DONE** — `DifficultySelectScreen` (Home → Mode → Difficulty → Game) lists all four tiers + a **Random** option; `BadmintonGame.fixedDifficulty` keeps the chosen tier across restarts (null = roll a fresh tier each match). A runtime difficulty *slider* (AI tuning knobs) is still open.
 - **M2-025** `[S]`: AI tier validation (100-match sims, >70% win rates).
 
 ### 2E -- Tutorial

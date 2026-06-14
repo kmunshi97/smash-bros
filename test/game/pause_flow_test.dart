@@ -67,6 +67,26 @@ void main() {
       await tester.tap(find.text('RESTART'));
       expect(resumed, 1);
       expect(restarted, 1);
+      // No Main Menu button when onMainMenu is null.
+      expect(find.text('MAIN MENU'), findsNothing);
+    });
+
+    testWidgets('shows and fires Main Menu when onMainMenu is provided', (
+      tester,
+    ) async {
+      var menu = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PauseMenu(
+            onResume: () {},
+            onRestart: () {},
+            onMainMenu: () => menu++,
+          ),
+        ),
+      );
+      expect(find.text('MAIN MENU'), findsOneWidget);
+      await tester.tap(find.text('MAIN MENU'));
+      expect(menu, 1);
     });
   });
 }

@@ -16,9 +16,13 @@ void main() {
       }
     });
 
-    test('covers all three tiers across seeds', () {
+    test('covers all tiers across seeds', () {
       final seen = <AiDifficulty>{};
-      for (var seed = 0; seed < 100 && seen.length < 3; seed++) {
+      for (
+        var seed = 0;
+        seed < 200 && seen.length < AiDifficulty.values.length;
+        seed++
+      ) {
         seen.add(AiDifficulty.roll(seed));
       }
       expect(
@@ -32,6 +36,10 @@ void main() {
   group('AiDifficulty.build', () {
     test('builds the matching controller type for each tier', () {
       final easy = AiDifficulty.easy.build(side: CourtSide.right, seed: 1);
+      final intermediate = AiDifficulty.intermediate.build(
+        side: CourtSide.right,
+        seed: 1,
+      );
       final hard = AiDifficulty.hard.build(side: CourtSide.right, seed: 1);
       final challenging = AiDifficulty.challenging.build(
         side: CourtSide.right,
@@ -39,8 +47,11 @@ void main() {
       );
 
       expect(easy, isA<BasicAI>());
+      expect(intermediate, isA<IntermediateAI>());
+      // IntermediateAI and ChallengingAI both extend HardAI, so check exact
+      // types rather than the base.
       expect(hard, isA<HardAI>());
-      // ChallengingAI extends HardAI, so check the exact type.
+      expect(hard, isNot(isA<IntermediateAI>()));
       expect(hard, isNot(isA<ChallengingAI>()));
       expect(challenging, isA<ChallengingAI>());
     });

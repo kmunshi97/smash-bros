@@ -23,6 +23,28 @@ abstract final class AppColors {
   static const Color divider = Color(0xFF3A3D42);
 
   // ------------------------------------------------------------------
+  // Arcade / hero-UI accents (CoC-inspired menus)
+  // ------------------------------------------------------------------
+
+  /// Gold used for titles, selected toggles and the primary CTA gradient.
+  static const Color gold = Color(0xFFF2B824);
+
+  /// Deeper gold for the bottom of gold gradients / bevels.
+  static const Color goldDeep = Color(0xFFC8860A);
+
+  /// Electric cyan energy accent (glows, secondary highlights).
+  static const Color energy = Color(0xFF36C5F0);
+
+  /// Deep space-blue at the top of the menu backgrounds.
+  static const Color spaceTop = Color(0xFF101A3A);
+
+  /// Near-black blue at the bottom of the menu backgrounds.
+  static const Color spaceBottom = Color(0xFF05070F);
+
+  /// Translucent panel fill for hero-UI cards over the space backdrop.
+  static const Color panel = Color(0xCC1A1F3A);
+
+  // ------------------------------------------------------------------
   // Game-specific
   // ------------------------------------------------------------------
 

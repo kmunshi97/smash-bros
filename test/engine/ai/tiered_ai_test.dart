@@ -47,7 +47,11 @@ import 'package:smash_bros/engine/sim/simulation.dart';
 
 void main() {
   group('HardAI / ChallengingAI — match completion and determinism', () {
-    for (final tier in [AiDifficulty.hard, AiDifficulty.challenging]) {
+    for (final tier in [
+      AiDifficulty.intermediate,
+      AiDifficulty.hard,
+      AiDifficulty.challenging,
+    ]) {
       test('$tier vs $tier completes and is deterministic', () {
         ({String finalSig, int leftScore, int rightScore}) run() => _runMatch(
           matchSeed: 0xBADC0DE,
@@ -73,7 +77,11 @@ void main() {
   });
 
   group('HardAI / ChallengingAI — jump-smash pairing (M1-036)', () {
-    for (final tier in [AiDifficulty.hard, AiDifficulty.challenging]) {
+    for (final tier in [
+      AiDifficulty.intermediate,
+      AiDifficulty.hard,
+      AiDifficulty.challenging,
+    ]) {
       test('$tier emits jump if and only if it emits smash', () {
         final sim = Simulation(seed: 77, targetScore: 5)..start();
         final leftAi = tier.build(side: CourtSide.left, seed: 1);
@@ -171,6 +179,17 @@ void main() {
       }
       return wins;
     }
+
+    test('intermediate wins the majority of 5 matches against easy', () {
+      final wins = winsVsEasy(AiDifficulty.intermediate, 5);
+      expect(
+        wins,
+        greaterThanOrEqualTo(3),
+        reason:
+            'IntermediateAI should beat BasicAI in most matches '
+            '(won $wins/5) — it predicts and reacts faster than easy',
+      );
+    });
 
     test('hard wins the majority of 5 matches against easy', () {
       final wins = winsVsEasy(AiDifficulty.hard, 5);

@@ -47,6 +47,10 @@ class RestartOverlayComponent extends PositionComponent
   /// so touch controls (move pad, action buttons) receive their taps normally.
   @override
   bool containsLocalPoint(Vector2 point) {
+    // When the host wired a post-match screen (M2-015), that screen drives
+    // replay — stay tap-transparent so the in-game tap-to-restart never fights
+    // it. With no hook (tests / standalone), the M1 tap-to-restart still works.
+    if (game.onMatchOver != null) return false;
     return game.view.phase == MatchPhase.matchOver;
   }
 

@@ -15,5 +15,6 @@ export 'ai_difficulty.dart';
 export 'basic_ai.dart';
 export 'challenging_ai.dart';
 export 'hard_ai.dart';
+export 'intermediate_ai.dart';
 export 'rule_based_ai.dart';
 export 'shuttle_predictor.dart';

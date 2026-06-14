@@ -67,10 +67,12 @@ final class Simulation {
     required int seed,
     CourtSide firstServer = CourtSide.left,
     int targetScore = kDefaultTargetScore,
+    int? timeLimitTicks,
   }) : _state = GameState(
          seed: seed,
          firstServer: firstServer,
          targetScore: targetScore,
+         timeLimitTicks: timeLimitTicks,
        );
 
   final GameState _state;
@@ -145,6 +147,11 @@ final class Simulation {
     _collision();
     _resourceTicks(inputs);
     _rules();
+
+    // Match clock last (M2-021): the timer is checked after this tick's points
+    // are scored, so an expiry and a point on the same tick resolve in favour
+    // of the point (the M2-019 timer-expiry semantics).
+    _state.fsm.tickMatchClock(_state.frame);
 
     _state.frame += 1;
   }
