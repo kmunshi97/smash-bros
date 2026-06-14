@@ -31,31 +31,59 @@ class ArenaCourtComponent extends Component
     );
   }
 
+  /// Screen y where the stands meet the hall floor (top of the surrounding
+  /// floor). Above this the parallax backdrop (crowd/wall) shows.
+  static const double _kHorizonY = 296;
+
   @override
   void render(Canvas canvas) {
     final geo = _geo;
-    _drawFloor(canvas, geo);
+    _drawHallFloor(canvas);
+    _drawCourt(canvas, geo);
+    _drawLighting(canvas, geo);
     _drawLines(canvas, geo);
   }
 
-  void _drawFloor(Canvas canvas, CourtGeometry geo) {
-    final quad = geo.floorQuad();
-    final path = Path()..addPolygon(quad, true);
-    final bounds = path.getBounds();
+  /// The surrounding hall floor — a full-width lit plane from the horizon to
+  /// the bottom, so the area outside the court is a floor, not black.
+  void _drawHallFloor(Canvas canvas) {
+    const rect = Rect.fromLTRB(0, _kHorizonY, kCourtWidth, kCourtHeight);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [theme.hallFar, theme.hallNear],
+        ).createShader(rect),
+    );
+    // Floorboards: horizontal lines, denser toward the horizon for perspective.
+    final board = Paint()
+      ..color = const Color(0x18000000)
+      ..strokeWidth = 1.5;
+    for (var i = 1; i < 16; i++) {
+      final t = i / 16;
+      final y = _kHorizonY + (kCourtHeight - _kHorizonY) * (t * t);
+      canvas.drawLine(Offset(0, y), Offset(kCourtWidth, y), board);
+    }
+  }
 
-    // Base floor: a vertical gradient (near = lit, far = shaded).
-    final floorPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [theme.floorFar, theme.floorNear],
-      ).createShader(bounds);
+  /// The green court trapezoid (its own gradient + faint plank texture).
+  void _drawCourt(Canvas canvas, CourtGeometry geo) {
+    final path = Path()..addPolygon(geo.floorQuad(), true);
+    final bounds = path.getBounds();
     canvas
       ..save()
       ..clipPath(path)
-      ..drawPath(path, floorPaint);
-
-    // Subtle floor texture: a few length-wise planks fading with depth.
+      ..drawRect(
+        bounds,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [theme.floorFar, theme.floorNear],
+          ).createShader(bounds),
+      );
     final texPaint = Paint()
       ..color = theme.floorTextureLine
       ..strokeWidth = 1.5;
@@ -67,21 +95,32 @@ class ArenaCourtComponent extends Component
         texPaint,
       );
     }
+    canvas.restore();
+  }
 
-    // Lighting: a soft radial highlight rising from the near-centre court.
-    final lightCenter = geo.point(kNetX, 0.4);
-    final lightPaint = Paint()
-      ..shader = RadialGradient(
-        center: Alignment(
-          (lightCenter.dx - bounds.center.dx) / (bounds.width / 2),
-          (lightCenter.dy - bounds.center.dy) / (bounds.height / 2),
-        ),
-        radius: 0.9,
-        colors: const [Color(0x33FFFFFF), Color(0x00000000)],
-      ).createShader(bounds);
-    canvas
-      ..drawRect(bounds, lightPaint)
-      ..restore();
+  /// Stadium lighting: a bright spotlight pool over the court fading to a dark
+  /// vignette at the screen edges. Drawn over the hall + court (under the
+  /// lines, which stay crisp on top).
+  void _drawLighting(Canvas canvas, CourtGeometry geo) {
+    const rect = Rect.fromLTRB(0, 0, kCourtWidth, kCourtHeight);
+    final center = geo.point(kNetX, 0.15); // just below court centre
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          center: Alignment(
+            (center.dx - kCourtWidth / 2) / (kCourtWidth / 2),
+            (center.dy - kCourtHeight / 2) / (kCourtHeight / 2),
+          ),
+          radius: 0.95,
+          colors: const [
+            Color(0x33FFFFFF), // lit pool over the court
+            Color(0x00000000),
+            Color(0x77000000), // vignette at the edges
+          ],
+          stops: const [0, 0.5, 1],
+        ).createShader(rect),
+    );
   }
 
   void _drawLines(Canvas canvas, CourtGeometry geo) {

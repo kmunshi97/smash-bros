@@ -14,6 +14,8 @@ class ArenaTheme {
   /// Creates a theme with explicit colours.
   const ArenaTheme({
     required this.name,
+    required this.hallNear,
+    required this.hallFar,
     required this.floorNear,
     required this.floorFar,
     required this.floorTextureLine,
@@ -28,6 +30,8 @@ class ArenaTheme {
   /// Indoor sports-hall green — the default look.
   static const ArenaTheme indoorGreen = ArenaTheme(
     name: 'Indoor Green',
+    hallNear: Color(0xFF3A4150),
+    hallFar: Color(0xFF20242E),
     floorNear: Color(0xFF2F6B33),
     floorFar: Color(0xFF1C4521),
     floorTextureLine: Color(0x22000000),
@@ -42,6 +46,8 @@ class ArenaTheme {
   /// Warm clay/wood court — an example alternate arena (proves the swap).
   static const ArenaTheme clayCourt = ArenaTheme(
     name: 'Clay Court',
+    hallNear: Color(0xFF4A3B30),
+    hallFar: Color(0xFF2A2017),
     floorNear: Color(0xFFB5683C),
     floorFar: Color(0xFF7E4527),
     floorTextureLine: Color(0x22000000),
@@ -55,6 +61,12 @@ class ArenaTheme {
 
   /// Display name (for a future arena picker).
   final String name;
+
+  /// Surrounding hall-floor colour at the near edge (around/under the court).
+  final Color hallNear;
+
+  /// Surrounding hall-floor colour at the far edge (toward the stands).
+  final Color hallFar;
 
   /// Floor colour at the near edge (brighter, lit).
   final Color floorNear;
