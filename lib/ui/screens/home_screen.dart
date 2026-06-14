@@ -22,7 +22,7 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             children: [
               const _StatusBar(profile: PlayerProfile.demo),
-              const Expanded(child: _HeroDiorama()),
+              const Expanded(child: _RosterShowcase()),
               _ModeRail(
                 onPlay: (mode) => Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -143,11 +143,13 @@ class _Avatar extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Hero diorama — title + a player-vs-opponent splash.
+// Roster showcase — the home hub's hero art: the champion line-up (NOT a 1v1
+// VS — that belongs to the fight/mode-setup screen). The player's champion is
+// featured centre, larger and lit; rivals flank it, smaller and dimmer.
 // ---------------------------------------------------------------------------
 
-class _HeroDiorama extends StatelessWidget {
-  const _HeroDiorama();
+class _RosterShowcase extends StatelessWidget {
+  const _RosterShowcase();
 
   @override
   Widget build(BuildContext context) {
@@ -177,12 +179,31 @@ class _HeroDiorama extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _Fighter(asset: 'assets/images/player_red_astronaut.png'),
-                _VsBadge(),
-                _Fighter(asset: 'assets/images/opponent_elon.png', flip: true),
+                // Rivals flank the hero, facing inward, smaller + dimmer.
+                _RosterMember(
+                  asset: 'assets/images/opponent_mukesh.png',
+                  flex: 3,
+                  heightFactor: 0.68,
+                  opacity: 0.65,
+                  flip: true, // mukesh faces left by default → face the hero
+                  glow: AppColors.player2,
+                ),
+                _RosterMember(
+                  asset: 'assets/images/player_red_astronaut.png',
+                  flex: 4,
+                  glow: AppColors.energy,
+                ),
+                _RosterMember(
+                  asset: 'assets/images/opponent_elon.png',
+                  flex: 3,
+                  heightFactor: 0.68,
+                  opacity: 0.65,
+                  flip: true, // elon faces right by default → face the hero
+                  glow: AppColors.player2,
+                ),
               ],
             ),
           ),
@@ -192,47 +213,50 @@ class _HeroDiorama extends StatelessWidget {
   }
 }
 
-class _Fighter extends StatelessWidget {
-  const _Fighter({required this.asset, this.flip = false});
+class _RosterMember extends StatelessWidget {
+  const _RosterMember({
+    required this.asset,
+    required this.flex,
+    required this.glow,
+    this.heightFactor = 1,
+    this.opacity = 1,
+    this.flip = false,
+  });
 
   final String asset;
+  final int flex;
+  final Color glow;
+  final double heightFactor;
+  final double opacity;
   final bool flip;
 
   @override
   Widget build(BuildContext context) {
     return Flexible(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.energy.withValues(alpha: 0.25),
-              blurRadius: 40,
-              spreadRadius: -10,
+      flex: flex,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: FractionallySizedBox(
+          heightFactor: heightFactor,
+          child: Opacity(
+            opacity: opacity,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                boxShadow: [
+                  BoxShadow(
+                    color: glow.withValues(alpha: 0.30),
+                    blurRadius: 38,
+                    spreadRadius: -12,
+                  ),
+                ],
+              ),
+              child: Transform.flip(
+                flipX: flip,
+                child: Image.asset(asset, fit: BoxFit.contain),
+              ),
             ),
-          ],
+          ),
         ),
-        child: Transform.flip(
-          flipX: flip,
-          child: Image.asset(asset, fit: BoxFit.contain),
-        ),
-      ),
-    );
-  }
-}
-
-class _VsBadge extends StatelessWidget {
-  const _VsBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Text(
-      'VS',
-      style: TextStyle(
-        color: AppColors.gold,
-        fontSize: 30,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 2,
-        shadows: [Shadow(color: AppColors.goldDeep, blurRadius: 12)],
       ),
     );
   }
