@@ -193,6 +193,8 @@ class _VsPreview extends StatelessWidget {
             asset: 'assets/images/player_red_astronaut.png',
             name: 'YOU',
             color: AppColors.player1,
+            // Astronaut faces left by default → flip to face the rival (right).
+            flip: true,
           ),
           Text(
             'VS',
