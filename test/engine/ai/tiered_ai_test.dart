@@ -164,6 +164,34 @@ void main() {
     });
   });
 
+  group('ChallengingAI — return reliability (~90%)', () {
+    test('commits to the return on ~90% of inbound shuttles, whiffs the rest', () {
+      // Each inbound shuttle is one reliability roll (onInboundShuttle); on the
+      // ~10% it lets go, chooseShotBit returns none (in reach but never swings).
+      // Counting non-none over many fresh rolls measures the commit rate.
+      final sim = Simulation(seed: 1)..start();
+      final ai = ChallengingAI(side: CourtSide.right, seed: 7);
+
+      var commits = 0;
+      const samples = 4000;
+      for (var i = 0; i < samples; i++) {
+        // Direct call to test the reliability roll isolation.
+        // ignore: invalid_use_of_protected_member
+        ai.onInboundShuttle(sim.state); // fresh per-inbound reliability roll
+        // Direct call to verify shot decision respects the reliability state.
+        // ignore: invalid_use_of_protected_member
+        if (ai.chooseShotBit(sim.state) != InputAction.none) commits++;
+      }
+
+      final rate = commits / samples;
+      expect(
+        rate,
+        inInclusiveRange(0.86, 0.94),
+        reason: 'challenging should return ~90% of shots, got ${rate * 100}%',
+      );
+    });
+  });
+
   group('Skill ordering — harder tiers beat the easy tier', () {
     /// Plays [n] seeded matches of [tier] (right side) vs easy (left side)
     /// and returns how many the harder tier won.

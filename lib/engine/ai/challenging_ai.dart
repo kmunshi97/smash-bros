@@ -13,6 +13,12 @@ const int _kMixedRangeNormalMax = 60;
 /// the short-service-line distance (`kShortServeLine* = kNetX ± 200`).
 const double _kNetDropDistance = 200;
 
+/// Share of `nextInt(100)` draws (per inbound shuttle) on which the
+/// challenging tier commits to returning the shot. The remaining ~10 % are
+/// deliberately let go so the top tier is hard but still beatable — it gets
+/// roughly nine of every ten shots back.
+const int _kReturnReliabilityPercent = 90;
+
 /// The top tier: the M2-023 "HardAI" spec pulled forward.
 ///
 /// Inherits [HardAI]'s predictive positioning (walk to where the shuttle
@@ -29,11 +35,20 @@ const double _kNetDropDistance = 200;
 ///   - otherwise a 60/40 normal/drop roll from the private PRNG (a smash
 ///     from deep or low contact would hit the tape, so it is never rolled).
 ///
+/// * **~90 % return reliability**: on each inbound shuttle it rolls once
+///   ([_kReturnReliabilityPercent]) whether to commit to the return. On the
+///   ~10 % it does not, it tracks the shuttle as usual but never swings — a
+///   natural-looking whiff that keeps the top tier beatable.
+///
 /// Jump is only ever emitted alongside smash (M1-036 invariant holds for
 /// every tier).
 final class ChallengingAI extends HardAI {
   /// Creates a [ChallengingAI] for [side] with its private PRNG [seed].
   ChallengingAI({required super.side, required super.seed});
+
+  /// Whether the current inbound shuttle will be returned (rolled once per
+  /// crossing in [onInboundShuttle]). `false` → deliberately whiff this rally.
+  bool _returnThisRally = true;
 
   @override
   AiDifficulty get difficulty => AiDifficulty.challenging;
@@ -48,7 +63,16 @@ final class ChallengingAI extends HardAI {
   double get movementDeadZone => 4;
 
   @override
+  void onInboundShuttle(GameState state) {
+    // Commit (or not) to this return — a fresh roll for every inbound shot.
+    _returnThisRally = random.nextInt(100) < _kReturnReliabilityPercent;
+  }
+
+  @override
   int chooseShotBit(GameState state) {
+    // The ~10 % of returns we let go: in reach but never swing → a clean miss.
+    if (!_returnThisRally) return InputAction.none;
+
     final shuttleX = state.shuttle.position.x.toDouble();
 
     // The smash geometry clears the net → take the kill.
