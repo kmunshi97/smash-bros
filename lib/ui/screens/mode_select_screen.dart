@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:smash_bros/game/modes/modes.dart';
-import 'package:smash_bros/ui/screens/game_screen.dart';
+import 'package:smash_bros/ui/screens/difficulty_select_screen.dart';
 import 'package:smash_bros/ui/theme/app_colors.dart';
 
 /// Mode-select screen (M2-013): pick a [GameMode] to play.
 ///
-/// Full-screen (no popups). Selecting a mode pushes the [GameScreen] for it;
-/// returning from a match (Main Menu) pops back here. The list is built from
-/// the available modes so adding a mode is a one-line change.
+/// Full-screen (no popups). Selecting a mode pushes the difficulty-select
+/// screen for it; the list is built from the available modes so adding a mode
+/// is a one-line change.
 class ModeSelectScreen extends StatelessWidget {
   /// Creates the mode-select screen.
   const ModeSelectScreen({super.key});
@@ -62,7 +62,9 @@ class _ModeCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => GameScreen(mode: mode)),
+          MaterialPageRoute<void>(
+            builder: (_) => DifficultySelectScreen(mode: mode),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),

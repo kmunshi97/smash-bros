@@ -24,11 +24,15 @@ import 'package:smash_bros/ui/screens/post_match_screen.dart';
 /// `game_units = logical_pixels * (720 / screenLogicalHeight)`, matching how
 /// the Flame camera letterboxes the 1280×720 viewport onto the screen.
 class GameScreen extends StatefulWidget {
-  /// Creates the game screen for [mode].
-  const GameScreen({required this.mode, super.key});
+  /// Creates the game screen for [mode] against [difficulty] (null = a random
+  /// tier rolled per match).
+  const GameScreen({required this.mode, this.difficulty, super.key});
 
   /// The selected game mode (rules: target score + optional time limit).
   final GameMode mode;
+
+  /// The chosen opponent difficulty, or null to roll a random tier each match.
+  final AiDifficulty? difficulty;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -46,14 +50,16 @@ class _GameScreenState extends State<GameScreen> {
     // XOR offset ensures the AI PRNG stream is independent of the match stream.
     final base = DateTime.now().millisecondsSinceEpoch;
     final aiSeed = base ^ 0xDEADBEEF;
+    // Resolve the initial AI: the chosen tier, or a rolled one for "random".
+    final initial = widget.difficulty ?? AiDifficulty.roll(aiSeed);
     _game =
         BadmintonGame(
             seed: base,
             mode: widget.mode,
-            rightAi: AiDifficulty.roll(aiSeed).build(
-              side: CourtSide.right,
-              seed: aiSeed,
-            ),
+            rightAi: initial.build(side: CourtSide.right, seed: aiSeed),
+            // null keeps restarts rolling a fresh tier (random); a chosen tier
+            // is kept across restarts.
+            fixedDifficulty: widget.difficulty,
           )
           ..onExitToMenu = _exitToMenu
           ..onMatchOver = _showPostMatch;

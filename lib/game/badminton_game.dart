@@ -88,6 +88,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     CourtSide firstServer = CourtSide.left,
     GameMode mode = const ClassicMode(),
     AIController? rightAi,
+    AiDifficulty? fixedDifficulty,
   }) : _simulation = Simulation(
          seed: seed,
          firstServer: firstServer,
@@ -97,6 +98,7 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
        _firstServer = firstServer,
        _mode = mode,
        _rightAi = rightAi,
+       _fixedDifficulty = fixedDifficulty,
        super(
          camera: CameraComponent.withFixedResolution(
            width: kCourtWidth,
@@ -146,6 +148,10 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
   // Stored so restartMatch can recreate the simulation with the same settings.
   final CourtSide _firstServer;
   final GameMode _mode;
+
+  /// The player-chosen opponent difficulty, or `null` to roll a random tier
+  /// each match (M2-024). Read by [restartMatch].
+  final AiDifficulty? _fixedDifficulty;
 
   /// The game mode this match is playing (Classic, Point Rush, …). Exposed so
   /// the HUD and post-match screen can label the mode and read its rules.
@@ -458,7 +464,9 @@ class BadmintonGame extends FlameGame with KeyboardEvents {
     );
     _simulation.start();
     _matchOverFired = false;
-    final difficulty = AiDifficulty.roll(aiSeed);
+    // Keep the chosen tier across restarts; roll a fresh one only when the
+    // player picked "random" (M2-024).
+    final difficulty = _fixedDifficulty ?? AiDifficulty.roll(aiSeed);
     _rightAi = difficulty.build(side: CourtSide.right, seed: aiSeed);
     rightAiDifficulty = difficulty;
     _driver.reset();

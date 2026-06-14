@@ -3,6 +3,8 @@
 // loop/asset bundle; navigation up to mode select is what these cover.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:smash_bros/game/modes/modes.dart';
+import 'package:smash_bros/ui/screens/difficulty_select_screen.dart';
 import 'package:smash_bros/ui/screens/home_screen.dart';
 import 'package:smash_bros/ui/screens/mode_select_screen.dart';
 
@@ -29,5 +31,25 @@ void main() {
     // Descriptions reflect the mode rules.
     expect(find.textContaining('First to 11'), findsOneWidget);
     expect(find.textContaining('Most points'), findsOneWidget);
+  });
+
+  testWidgets('selecting a mode navigates to difficulty select', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: ModeSelectScreen()));
+    await tester.tap(find.text('Classic'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DifficultySelectScreen), findsOneWidget);
+  });
+
+  testWidgets('difficulty select lists every tier plus Random', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: DifficultySelectScreen(mode: ClassicMode())),
+    );
+    expect(find.text('Easy'), findsOneWidget);
+    expect(find.text('Intermediate'), findsOneWidget);
+    expect(find.text('Hard'), findsOneWidget);
+    expect(find.text('Challenging'), findsOneWidget);
+    expect(find.text('Random'), findsOneWidget);
   });
 }

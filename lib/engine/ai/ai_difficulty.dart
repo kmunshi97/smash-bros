@@ -2,6 +2,7 @@ import 'package:smash_bros/engine/ai/ai_controller.dart';
 import 'package:smash_bros/engine/ai/basic_ai.dart';
 import 'package:smash_bros/engine/ai/challenging_ai.dart';
 import 'package:smash_bros/engine/ai/hard_ai.dart';
+import 'package:smash_bros/engine/ai/intermediate_ai.dart';
 import 'package:smash_bros/engine/entities/court.dart';
 import 'package:smash_bros/engine/random/game_random.dart';
 
@@ -15,6 +16,11 @@ enum AiDifficulty {
   /// shot mix. The original M1-028 opponent.
   easy,
 
+  /// `IntermediateAI` — 12-tick reaction, predicts the landing spot but with
+  /// looser positioning, calmer 65/25/10 shot mix. The rung between easy and
+  /// hard (M2-022).
+  intermediate,
+
   /// `HardAI` — 8-tick reaction, predicts the shuttle's landing x and walks
   /// there early, more aggressive 50/35/15 shot mix.
   hard,
@@ -23,6 +29,14 @@ enum AiDifficulty {
   /// prediction, and context-aware shot selection (jump-smash on high
   /// shuttles, drops near the net).
   challenging;
+
+  /// A short title-cased label for the difficulty-select screen.
+  String get displayName => switch (this) {
+    AiDifficulty.easy => 'Easy',
+    AiDifficulty.intermediate => 'Intermediate',
+    AiDifficulty.hard => 'Hard',
+    AiDifficulty.challenging => 'Challenging',
+  };
 
   /// Rolls a tier deterministically from [seed].
   ///
@@ -38,6 +52,8 @@ enum AiDifficulty {
     switch (this) {
       case AiDifficulty.easy:
         return BasicAI(side: side, seed: seed);
+      case AiDifficulty.intermediate:
+        return IntermediateAI(side: side, seed: seed);
       case AiDifficulty.hard:
         return HardAI(side: side, seed: seed);
       case AiDifficulty.challenging:

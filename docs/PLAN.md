@@ -273,9 +273,9 @@ The flat side-view sim vs. perspective-court art mismatch caused false in/out ca
 - **M2-019** `[S]` (DONE): `GameMode` interface (sealed, pure config → Simulation). Timer-expiry semantics implemented via a deterministic engine **match clock** (`MatchFsm.tickMatchClock`, snapshotted + in the desync signature) ticked **after** scoring each tick: a countdown hitting zero mid-rally lets the rally finish and its point count; expiry-vs-point on the same tick favours the point; a tie at expiry goes to a golden point.
 - **M2-020** `[S]` (DONE): `ClassicMode` (target 5/11/21, untimed). Side-switch flag still default off (unchanged).
 - **M2-021** `[S]` (DONE): `PointRushMode` (timed; unreachable score target so only the clock ends it; leader at expiry wins). `RenderState` exposes `isTimed`/`remainingTicks`, rendered by `MatchClockComponent` — a top-centre `m:ss` countdown (warning colour in the last 10 s) shown only for timed matches.
-- **M2-022** `[S]`: IntermediateAI.
-- **M2-023** `[O]`: HardAI (predictive movement, corner placement, perfect blocks, 3-frame delay).
-- **M2-024** `[S]`: difficulty config + presets + slider.
+- **M2-022** `[S]` (DONE): `IntermediateAI` — extends `HardAI` (trajectory prediction + net-clearance smash gate) but slower (12-tick reaction) with looser positioning and a calmer 65/25/10 mix: the rung between easy and hard. Skill-ordering test: beats easy in most matches.
+- **M2-023** `[O]`: HardAI (predictive movement, corner placement, perfect blocks, 3-frame delay). (Delivered earlier as `HardAI`/`ChallengingAI`; perfect-block path still dormant pending the engine block-connect fix.)
+- **M2-024** `[S]` (partial): difficulty config + presets + slider. **Difficulty select DONE** — `DifficultySelectScreen` (Home → Mode → Difficulty → Game) lists all four tiers + a **Random** option; `BadmintonGame.fixedDifficulty` keeps the chosen tier across restarts (null = roll a fresh tier each match). A runtime difficulty *slider* (AI tuning knobs) is still open.
 - **M2-025** `[S]`: AI tier validation (100-match sims, >70% win rates).
 
 ### 2E -- Tutorial
