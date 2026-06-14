@@ -1,59 +1,41 @@
 import 'package:flame/components.dart';
-import 'package:smash_bros/engine/constants.dart';
+import 'package:smash_bros/game/arena/arena_theme.dart';
 import 'package:smash_bros/game/badminton_game.dart';
+import 'package:smash_bros/game/components/arena_court_component.dart';
 import 'package:smash_bros/game/components/parallax_backdrop_component.dart';
 
-/// Static scenery component that loads and renders the background assets.
+export 'package:smash_bros/game/components/arena_court_component.dart'
+    show NetComponent;
+
+/// Scenery host (M2 court rework) — stacks the arena from swappable layers.
 ///
-/// Under the hood, this loads:
-///  * `stadium_bg.png` as the background layer (walls, crowd, scoreboard, lights)
-///  * `stadium_floor.png` as the badminton court floor (green court and lines)
+/// Layers, back to front:
+///  * `stadium_bg.png` parallax backdrop (crowd / stands), drifting for depth;
+///  * [ArenaCourtComponent] — the procedural textured floor + white court lines
+///    drawn at exact dimensions;
+///  * (players + shuttle render here, between this component and the net);
+///  * [NetComponent] — the procedural net, added to the world above the players.
 ///
-/// Added to the world container at priority = -2 (Background) and -1 (Floor)
-/// so that players and the shuttlecock naturally render in front of them.
+/// The court markings and net are code-drawn and fixed; only the [ArenaTheme]'s
+/// **floor** changes between arenas, so swapping the theme re-skins everything.
 class CourtComponent extends Component with HasGameReference<BadmintonGame> {
-  /// Renders background layers at priority -2 (placed at back of parent world).
-  CourtComponent() : super(priority: -2);
+  /// Renders scenery at priority -2 (back of the world).
+  CourtComponent({this.theme = ArenaTheme.indoorGreen}) : super(priority: -2);
 
-  late final ParallaxBackdropComponent _background;
-  late final SpriteComponent _floor;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-
-    // Parallax stadium backdrop (M2-002): loads stadium_bg.png itself, drifts
-    // for depth. Behind the floor (priority 0 within this component).
-    _background = ParallaxBackdropComponent(priority: 0);
-    await add(_background);
-
-    final floorSprite = await game.loadSprite('stadium_floor.png');
-    _floor = SpriteComponent(
-      sprite: floorSprite,
-      size: Vector2(kCourtWidth, kCourtHeight),
-      priority: 1,
-    );
-    await add(_floor);
-
-    // Add NetComponent directly to parent (the world) so it can render at
-    // priority = 10, overlaying the players and the shuttlecock.
-    final net = NetComponent();
-    await parent?.add(net);
-  }
-}
-
-/// Foreground overlay component that renders the net and posts on top of
-/// characters and the playfield.
-class NetComponent extends SpriteComponent
-    with HasGameReference<BadmintonGame> {
-  /// Render at a high priority (10) to draw in front of players (priority 0/default)
-  /// and the shuttlecock (priority 0/default).
-  NetComponent() : super(priority: 10);
+  /// The arena theme applied to the floor, lines and net.
+  final ArenaTheme theme;
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    sprite = await game.loadSprite('stadium_net.png');
-    size = Vector2(kCourtWidth, kCourtHeight);
+
+    // Far backdrop (crowd/stands) — loads stadium_bg.png itself and parallaxes.
+    await add(ParallaxBackdropComponent(priority: 0));
+
+    // Procedural floor + court lines, over the backdrop and under the players.
+    await add(ArenaCourtComponent(theme: theme, priority: 1));
+
+    // Procedural net on the world at priority 10, over players and shuttle.
+    await parent?.add(NetComponent(theme: theme));
   }
 }
