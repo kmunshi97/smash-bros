@@ -29,8 +29,8 @@ class CourtGeometry {
     required this.offsetY,
     required this.scaleX,
     required this.scaleY,
-    this.perspectiveGain = 0.22,
-    this.depthSpan = 120,
+    this.perspectiveGain = 0.26,
+    this.depthSpan = 150,
   });
 
   /// `CourtProjection` affine params (`screen = offset + scale*engine`).
