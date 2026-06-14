@@ -110,6 +110,15 @@ abstract base class RuleBasedAi implements AIController {
   @protected
   int chooseShotBit(GameState state);
 
+  /// Called once each time the shuttle newly crosses onto this AI's side,
+  /// just before the reaction delay is armed.
+  ///
+  /// Lets a tier set up per-inbound-shot state (e.g. a reliability roll that
+  /// decides whether this particular return will be attempted). Default:
+  /// no-op.
+  @protected
+  void onInboundShuttle(GameState state) {}
+
   // -- Private mutable state (allowed per AIController architecture note) -----
 
   MatchPhase? _lastSeenPhase;
@@ -219,6 +228,7 @@ abstract base class RuleBasedAi implements AIController {
     if (_lastSeenShuttleSide != shuttleSide) {
       _lastSeenShuttleSide = shuttleSide;
       if (shuttleSide == side) {
+        onInboundShuttle(state);
         _reactionTicksRemaining = reactionDelayTicks;
       }
     }
